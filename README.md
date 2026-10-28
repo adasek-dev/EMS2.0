@@ -1,9 +1,13 @@
 # EMS 2.0 – integrace pro Home Assistant
 
 Klient pro server [EMS 2.0](https://ems20.xnas.cz). Posílá serveru měření z domu (FVE, baterie, spotřeba, síť)
-a provádí povely, které server spočítá. O baterii rozhoduje jen server, integrace jen měří a přepíná režimy střídače.
+a provádí povely, které server spočítá a odešle zpět klientovi. O baterii rozhoduje jen server, integrace jen měří a přepíná režimy střídače.
+
+Integrace vyžaduje pro řízení integraci z https://github.com/wills106/homeassistant-solax-modbus
 
 Podporované střídače: **SolaX** (přes integraci SolaX Modbus).
+Veškeré řízení střídače je řízeno pouze přes remote control a proto nezapisuje do EEPROM!
+
 <img width="1881" height="823" alt="{34D4E253-915D-4C61-87F2-E9755C834A82}" src="https://github.com/user-attachments/assets/5a6f591c-2499-4f82-b419-c6bcd8b1836c" />
 
 ## Instalace
@@ -26,10 +30,10 @@ Zkopíruj složku `custom_components/ems2` do `config/custom_components/` a rest
    - **Dům ID** (např. `dum_7K4PQ2`),
    - token.
 
-## Stín a řízení
+## Učení a řízení
 
-- **Stín** (prvních aspoň 7 dní): integrace jen posílá data, server počítá plán a na webu vidíš,
-  co by EMS dělalo. Střídače se nedotkne.
+- **Učení** (prvních aspoň 7 dní): integrace jen posílá data, server počítá plán a na webu vidíš,
+  co by EMS dělalo. Střídače se to nijak nedotkne.
 - **Řízení** zapneš přepínačem **EMS řídí** (v HA nebo na webu). Jde to po 7 dnech stínu,
   bez mezery v datech delší než 2 h a se 3 slunečnými dny pro kalibraci FVE.
 
@@ -49,7 +53,7 @@ Zkopíruj složku `custom_components/ems2` do `config/custom_components/` a rest
 
 ## Pojistky
 
-- Ve stínu se integrace střídače nedotkne.
+- V režimu učení se integrace střídače nedotkne.
 - Bez spojení se serverem déle než 10 min nebo po vypršení povelu přepne na `self_use`.
 - Nenabíjí nad strop a neprodává pod minimum.
 - Hlídá autorepeat (watchdog) a zaseknutí v (R) módu.
