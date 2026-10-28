@@ -4,6 +4,7 @@ Klient pro server [EMS 2.0](https://ems20.xnas.cz). Posílá serveru měření z
 a provádí povely, které server spočítá. O baterii rozhoduje jen server, integrace jen měří a přepíná režimy střídače.
 
 Podporované střídače: **SolaX** (přes integraci SolaX Modbus).
+<img width="1881" height="823" alt="{34D4E253-915D-4C61-87F2-E9755C834A82}" src="https://github.com/user-attachments/assets/5a6f591c-2499-4f82-b419-c6bcd8b1836c" />
 
 ## Instalace
 
@@ -42,6 +43,9 @@ Zkopíruj složku `custom_components/ems2` do `config/custom_components/` a rest
 | `sell` | prodej z baterie |
 | `pv_export` | přebytek FVE do sítě, baterie se nenabíjí |
 | `no_export` | nic do sítě |
+
+<img width="1880" height="784" alt="{A0C6B53E-0716-49AF-89F3-451DC2927CEE}" src="https://github.com/user-attachments/assets/a4d72326-a208-418c-b34a-c725bdb16f41" />
+
 
 ## Pojistky
 
