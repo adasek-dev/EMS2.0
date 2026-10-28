@@ -1,0 +1,107 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "EMS 2.0 – connect to server",
+        "description": "Server URL, house ID and token are on the EMS 2.0 web (Token page).",
+        "data": {
+          "url": "Server URL",
+          "site_id": "House ID",
+          "token": "Token"
+        }
+      },
+      "inverter": {
+        "title": "Střídač SolaX",
+        "description": "Dům: {site}. Prefix entit integrace SolaX Modbus (např. solax → sensor.solax_battery_capacity).",
+        "data": {
+          "prefix": "Prefix entit SolaX",
+          "grid_invert": "Obrátit znaménko výkonu sítě (když + znamená odběr)"
+        }
+      },
+      "house": {
+        "title": "Údaje o domu",
+        "description": "Server zatím nezná baterii a panely. Azimut: 0 = jih, −90 = východ, 90 = západ. Vše jde později upravit na webu.",
+        "data": {
+          "lat": "Zeměpisná šířka",
+          "lon": "Zeměpisná délka",
+          "capacity_kwh": "Kapacita baterie",
+          "min_soc": "Minimální SOC",
+          "max_charge_w": "Max. nabíjecí výkon",
+          "max_discharge_w": "Max. vybíjecí výkon",
+          "breaker_a": "Hlavní jistič",
+          "pv1_kwp": "Pole 1 – výkon",
+          "pv1_tilt": "Pole 1 – sklon",
+          "pv1_azimuth": "Pole 1 – azimut",
+          "pv2_kwp": "Pole 2 – výkon",
+          "pv2_tilt": "Pole 2 – sklon",
+          "pv2_azimuth": "Pole 2 – azimut"
+        }
+      },
+      "reauth_confirm": {
+        "title": "EMS 2.0 – nový token",
+        "description": "Token domu {site} přestal platit. Vygeneruj na webu nový a vlož ho sem.",
+        "data": {
+          "token": "Token"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid token or house ID.",
+      "cannot_connect": "Cannot connect.",
+      "unknown": "Unexpected server error (house may not be approved yet).",
+      "entity_missing": "Entity sensor.PREFIX_battery_capacity not found – check the prefix.",
+      "invalid_config": "Server rejected the values."
+    },
+    "abort": {
+      "already_configured": "Tento dům už je připojený.",
+      "reauth_successful": "Token uložen."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "EMS 2.0 – entity měření",
+        "description": "Prázdné pole = výchozí entita SolaX Modbus podle prefixu.",
+        "data": {
+          "prefix": "Prefix entit SolaX",
+          "grid_invert": "Obrátit znaménko výkonu sítě",
+          "soc": "SOC baterie (%)",
+          "pv_w": "Výkon FVE",
+          "load_w": "Spotřeba domu",
+          "grid_l1_w": "Síť L1",
+          "grid_l2_w": "Síť L2",
+          "grid_l3_w": "Síť L3",
+          "battery_w": "Výkon baterie (+ nabíjení)",
+          "pv_today_kwh": "Výroba FVE dnes",
+          "inverter_state": "Stav střídače (run mode)"
+        }
+      }
+    }
+  },
+  "services": {
+    "set_tariff": {
+      "name": "Nastavit tarif",
+      "description": "Pošle tarif domu na server (nová verze).",
+      "fields": {
+        "tariff": {
+          "name": "Tarif",
+          "description": "Tarif jako objekt, nebo {\"template\": \"cez_d57d_fix\"} s úpravami."
+        },
+        "entry_id": {
+          "name": "Dům",
+          "description": "Jen pro tento dům (jinak všechny)."
+        }
+      }
+    },
+    "replan": {
+      "name": "Přepočítat plán",
+      "description": "Požádá server o nový plán hned.",
+      "fields": {
+        "entry_id": {
+          "name": "Dům",
+          "description": "Jen pro tento dům."
+        }
+      }
+    }
+  }
+}

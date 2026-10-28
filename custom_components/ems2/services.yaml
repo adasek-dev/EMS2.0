@@ -1,0 +1,19 @@
+set_tariff:
+  fields:
+    tariff:
+      required: true
+      example: '{"template": "cez_d57d_fix", "valid_from": "2026-11-01"}'
+      selector:
+        object:
+    entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: ems2
+replan:
+  fields:
+    entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: ems2
