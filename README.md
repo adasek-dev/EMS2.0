@@ -50,6 +50,9 @@ Zkopíruj složku `custom_components/ems2` do `config/custom_components/` a rest
 
 <img width="1880" height="784" alt="{A0C6B53E-0716-49AF-89F3-451DC2927CEE}" src="https://github.com/user-attachments/assets/a4d72326-a208-418c-b34a-c725bdb16f41" />
 
+<img width="1658" height="911" alt="{35D20215-4B56-4EE5-ABEF-98722F03E455}" src="https://github.com/user-attachments/assets/74ded836-ad1b-4833-bf8f-1025bdc3f3da" />
+
+
 
 ## Pojistky
 
