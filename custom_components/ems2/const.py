@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 DOMAIN = "ems2"
-VERSION = "2.0.11"
+VERSION = "2.0.14"
 DEFAULT_URL = "https://ems20.xnas.cz"
 DEFAULT_PREFIX = "solax"
 

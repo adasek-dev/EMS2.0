@@ -18,6 +18,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         Price(c, "cena_prodej", "Cena prodeje teď", "sell"), PlanSensor(c), PlanCost(c, "today"),
         PlanCost(c, "tomorrow"), Accounting(c, "cost_kc", "naklady_dnes", "Náklady dnes"),
         Accounting(c, "savings_kc", "uspora_dnes", "Úspora dnes"), BatteryTarget(c),
+        HdoTariff(c), HdoNextSwitch(c),
     ])
 
 
@@ -136,3 +137,52 @@ class BatteryTarget(Ems2Entity, SensorEntity):
     @property
     def native_value(self):
         return (self.d.get("command") or {}).get("battery_w")
+
+
+class _Hdo(Ems2Entity, SensorEntity):
+    """Časy HDO od distributora (ČEZ Distribuce) – posílá server v povelu (`hdo`)."""
+
+    @property
+    def hdo(self) -> dict:
+        return (self.d.get("command") or {}).get("hdo") or {}
+
+    @property
+    def available(self) -> bool:
+        return super().available and bool(self.hdo)
+
+
+class HdoTariff(_Hdo):
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["VT", "NT"]
+
+    def __init__(self, c):
+        super().__init__(c, "hdo_tarif", "HDO tarif", "mdi:transmission-tower")
+
+    @property
+    def native_value(self):
+        return self.hdo.get("tariff")
+
+    @property
+    def extra_state_attributes(self):
+        h = self.hdo
+        fmt = lambda w: ", ".join(f"{a}–{b}" for a, b in (w or []))    # noqa: E731
+        return {"low_tariff": h.get("low"), "next_switch": h.get("next_switch"), "next_tariff": h.get("next_tariff"),
+                "remaining_min": h.get("remaining_min"), "nt_today": fmt(h.get("today")), "nt_tomorrow": fmt(h.get("tomorrow")),
+                "nt_today_windows": h.get("today"), "nt_tomorrow_windows": h.get("tomorrow"),
+                "signal": h.get("signal"), "fetched_at": h.get("fetched_at")}
+
+
+class HdoNextSwitch(_Hdo):
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(self, c):
+        super().__init__(c, "hdo_prepnuti", "HDO další přepnutí", "mdi:clock-start")
+
+    @property
+    def native_value(self):
+        v = self.hdo.get("next_switch")
+        return dt_util.parse_datetime(v) if v else None
+
+    @property
+    def extra_state_attributes(self):
+        return {"next_tariff": self.hdo.get("next_tariff"), "remaining_min": self.hdo.get("remaining_min")}

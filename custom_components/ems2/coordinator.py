@@ -23,7 +23,7 @@ from homeassistant.util import dt as dt_util
 from .api import EmsApi, EmsApiError, EmsAuthError
 from .const import (ACCOUNTING_INTERVAL_S, BUFFER_MAX, CONF_ENTITIES, CONF_GRID_INVERT, CONF_PREFIX, DEFAULT_PREFIX,
                     DOMAIN, INFO_INTERVAL_S, OFFLINE_FALLBACK_S, TELEMETRY_DEFAULTS, UPDATE_INTERVAL_S)
-from . import heating
+from . import heating, switching
 from .heating import HeatingControl
 from .solax import SolaxAdapter, SolaxEntities, safe_mode
 from .telemetry import build_sample, history_points, sensor_values
@@ -55,6 +55,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         self.applied: dict = {"mode": None, "reason": "zatím nic", "controlling": False}
         self._controlling = False
         self.heating = HeatingControl()
+        self._dev_last: dict = {}
         self.boiler_ctl = HeatingControl()
         self._heat: tuple = (None, None, None, None, None, None)
         self._last_info = -1e9
@@ -127,6 +128,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
                          ("boiler_tpv", heating.read_temp(self._get_state, bc.get("tpv")))):
                 if v is not None:
                     extra[k] = v
+        extra.update(switching.telemetry(self._get_state, (self.command or {}).get("devices")))
         self._heat = (heat_on, heat_w, sample.get("pv_w"), sample.get("load_w"), b_on, b_w)
         if extra:
             sample["extra"] = {**sample.get("extra", {}), **extra}
@@ -168,9 +170,23 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
             _LOGGER.debug("EMS 2.0: %s", e)
 
         await self._apply(now, sample.get("soc"))
+        await self._switch_devices()
         if auth_failed is not None:
             raise ConfigEntryAuthFailed(f"EMS 2.0: {auth_failed.message}")
         return self.snapshot()
+
+    async def _switch_devices(self) -> None:
+        """Zařízení přes HA (Shelly…): zapnout / vypnout podle povelu serveru (i ve zkušebním provozu)."""
+        offline = (time.monotonic() - self.last_ok) if self.last_ok else 1e9
+        if not self.command or offline > OFFLINE_FALLBACK_S:
+            return                      # bez serveru zařízení nechat, jak jsou
+        for domain, service, data in switching.calls(self._get_state, self.command.get("devices"),
+                                                     self._dev_last, time.monotonic()):
+            try:
+                await self.hass.services.async_call(domain, service, data, blocking=True)
+                _LOGGER.info("EMS 2.0: %s %s", service, data["entity_id"])
+            except Exception as e:      # noqa: BLE001
+                _LOGGER.warning("EMS 2.0: %s %s selhalo: %s", service, data["entity_id"], e)
 
     async def _apply(self, now, soc: float | None) -> None:
         offline = (time.monotonic() - self.last_ok) if self.last_ok else 1e9
@@ -202,6 +218,10 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         h = heating.decide_many(mode, devices, pv_w, load_w, time.monotonic())
         if h:
             mode, label, grid_w, reason = h
+        elif mode == "charge" and server_control:
+            g = heating.charge_grid_target(self.command, slot, pv_w, load_w)
+            if g is not None:
+                grid_w = g                    # nabíjet plánovaným výkonem bez ohledu na to, kolik dům zrovna bere
         calls = self.adapter.calls_for(mode, grid_w, slot, self._get_state)
         error = None
         for domain, service, data in calls:

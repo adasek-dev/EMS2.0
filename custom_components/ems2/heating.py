@@ -144,3 +144,17 @@ def vt_battery_first(heating_cfg: dict, command: dict | None, slot: str) -> bool
     cmd = command or {}
     cur = cmd if cmd.get("slot") == slot else (cmd.get("next") or {})
     return bool((heating_cfg or {}).get("vt_battery_first", True) and cur.get("vt"))
+
+
+def charge_grid_target(command: dict | None, slot: str, pv_w: float | None, load_w: float | None) -> int | None:
+    """Nabíjení ze sítě: odběr ze sítě = plánovaný výkon do baterie + skutečná spotřeba domu − FVE.
+
+    Plán počítá odběr z předpovědi spotřeby; když dům bere víc (trouba, topení), pevný odběr by
+    nestačil a baterie by se místo nabíjení vybíjela. Vrací grid_w pro povel (− = odběr) nebo None.
+    """
+    cmd = command or {}
+    cur = cmd if cmd.get("slot") == slot else (cmd.get("next") or {})
+    bw = cur.get("battery_w")
+    if cur.get("mode") != "charge" or not bw or bw <= 0 or pv_w is None or load_w is None:
+        return None
+    return -int(round(max(0.0, bw + load_w - pv_w) / 100.0) * 100)
