@@ -1,6 +1,6 @@
 # EMS 2.0 – integrace pro Home Assistant
 
-Klient pro server [EMS 2.0](https://ems20.xnas.cz). Posílá serveru měření z domu (FVE, baterie, spotřeba, síť)
+Klient pro server [EMS 2.0](https://ems20.cz). Posílá serveru měření z domu (FVE, baterie, spotřeba, síť)
 a provádí povely, které server spočítá a odešle zpět klientovi. O baterii rozhoduje jen server, integrace jen měří a přepíná režimy střídače.
 
 Integrace vyžaduje pro řízení integraci z https://github.com/wills106/homeassistant-solax-modbus
