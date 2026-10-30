@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/icon-192.png" width="88" alt="EMS 2.0">
+  <img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/icon-192.png" width="88" alt="EMS 2.0">
 </p>
 
 <h1 align="center">EMS 2.0 pro Home Assistant</h1>
@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img src="images/prehled.webp" alt="Přehled domu v EMS 2.0: tok energie, režim teď a co EMS udělá dál" width="900">
+  <img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/prehled.webp" alt="Přehled domu v EMS 2.0: tok energie, režim teď a co EMS udělá dál" width="900">
 </p>
 
 ---
@@ -52,7 +52,7 @@ Integrace posílá měření a provádí povely. **O baterii rozhoduje server**,
 Raspberry Pi jako na výkonném serveru a vylepšení dostanete bez aktualizace.
 
 <p align="center">
-  <img src="images/graf.webp" alt="Graf Dnes a zítra: plán nabíjení, prodeje a stav baterie s cenami" width="900">
+  <img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/graf.webp" alt="Graf Dnes a zítra: plán nabíjení, prodeje a stav baterie s cenami" width="900">
   <br><sub>Graf „Dnes a zítra“: skutečnost plnou čarou, plán čárkovaně, pás dole ukazuje, co EMS udělá.</sub>
 </p>
 
@@ -72,18 +72,18 @@ ale **střídače se nedotkne**. Řízení pak zapnete jedním přepínačem *EM
 
 <table>
   <tr>
-    <td width="50%"><img src="images/plan.webp" alt="Plán po hodinách"><br><sub><b>Plán po hodinách</b> – co, kdy a proč. Každou hodinu jde ručně upravit.</sub></td>
-    <td width="50%"><img src="images/rozbor.webp" alt="Rozbor plánu"><br><sub><b>Rozbor</b> – srovnání tarifů, předpověď proti skutečnosti, ideální řízení.</sub></td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/plan.webp" alt="Plán po hodinách"><br><sub><b>Plán po hodinách</b> – co, kdy a proč. Každou hodinu jde ručně upravit.</sub></td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/rozbor.webp" alt="Rozbor plánu"><br><sub><b>Rozbor</b> – srovnání tarifů, předpověď proti skutečnosti, ideální řízení.</sub></td>
   </tr>
   <tr>
-    <td><img src="images/spot.webp" alt="Spotové ceny"><br><sub><b>Spotové ceny</b> – ceny OTE, predikce na další dny a její úspěšnost.</sub></td>
-    <td><img src="images/billing.webp" alt="Vyúčtování"><br><sub><b>Vyúčtování</b> – náklady k dnešku, zálohy a odhad přeplatku.</sub></td>
+    <td><img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/spot.webp" alt="Spotové ceny"><br><sub><b>Spotové ceny</b> – ceny OTE, predikce na další dny a její úspěšnost.</sub></td>
+    <td><img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/billing.webp" alt="Vyúčtování"><br><sub><b>Vyúčtování</b> – náklady k dnešku, zálohy a odhad přeplatku.</sub></td>
   </tr>
 </table>
 
 <table>
   <tr>
-    <td width="34%"><img src="images/mobil.webp" alt="EMS 2.0 v telefonu"></td>
+    <td width="34%"><img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/mobil.webp" alt="EMS 2.0 v telefonu"></td>
     <td>
       <h3>V kapse</h3>
       <p>Portál si přidáte na plochu telefonu jako aplikaci. Vidíte, co dům právě dělá a co EMS chystá dál.</p>
@@ -100,11 +100,11 @@ ale **střídače se nedotkne**. Řízení pak zapnete jedním přepínačem *EM
 
 | Systém | Jak |
 | --- | --- |
-| <img src="images/homeassistant.svg" width="28"> **Home Assistant** | tato integrace – měření, povely a 62 entit s plánem, cenami a doporučením |
-| <img src="images/solax-x.png" width="28"> **SolaX** (hybridní střídače Gen4) | řízení přes integraci [SolaX Inverter Modbus](https://github.com/wills106/homeassistant-solax-modbus) |
+| <img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/homeassistant.svg" width="28"> **Home Assistant** | tato integrace – měření, povely a 62 entit s plánem, cenami a doporučením |
+| <img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/solax-x.png" width="28"> **SolaX** (hybridní střídače Gen4) | řízení přes integraci [SolaX Inverter Modbus](https://github.com/wills106/homeassistant-solax-modbus) |
 | 🔌 **Jakýkoli jiný střídač** | režim *Jen data a doporučení*: EMS nic neřídí, vy řídíte automatizacemi podle jeho doporučení |
-| <img src="images/nodered.svg" width="28"> **Node-RED** | hotové flow (i přímo přes Modbus, bez HA) – v portálu v *Návodech* |
-| <img src="images/mqtt.png" width="28"> **MQTT** | šifrovaně, s HA Discovery – pro vlastní systémy, Shelly, ESP |
+| <img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/nodered.svg" width="28"> **Node-RED** | hotové flow (i přímo přes Modbus, bez HA) – v portálu v *Návodech* |
+| <img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/mqtt.png" width="28"> **MQTT** | šifrovaně, s HA Discovery – pro vlastní systémy, Shelly, ESP |
 
 ## Bezpečně od prvního dne
 
