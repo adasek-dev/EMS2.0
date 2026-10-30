@@ -29,6 +29,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         AdviceEnergy(c, "fve_zitra", "FVE zítra", ("tomorrow", "pv_kwh"), "mdi:solar-power"),
         AdviceEnergy(c, "spotreba_zbytek_dne", "Spotřeba zbytek dne", ("today_rest", "load_kwh"), "mdi:home-lightning-bolt"),
         AdviceEnergy(c, "spotreba_zitra", "Spotřeba zítra", ("tomorrow", "load_kwh"), "mdi:home-lightning-bolt"),
+        BoilerOut(c, "bojler_cil", "Bojler: cílová teplota", "target_c", "°C", SensorDeviceClass.TEMPERATURE),
+        BoilerOut(c, "bojler_vykon", "Bojler: plánovaný výkon", "power_w", "W", SensorDeviceClass.POWER),
     ])
 
 
@@ -324,3 +326,25 @@ class Billing(Ems2Entity, SensorEntity):
         b = self.d.get("billing") or {}
         return {k: b.get(k) for k in ("start", "end", "cost_now", "paid_now", "balance_now", "projected", "advances_total",
                                       "fixed_month", "energy_kwh", "recommended", "recommended_rest", "forecast_basis")}
+
+
+class BoilerOut(_Advice):
+    """Plán ohřevu bojleru pro vlastní řízení (EMS plánuje ohřev): cílová teplota a výkon teď."""
+
+    def __init__(self, c, key, name, field, unit, dclass):
+        super().__init__(c, key, name, "mdi:water-boiler")
+        self._field = field
+        self._attr_native_unit_of_measurement = unit
+        self._attr_device_class = dclass
+
+    @property
+    def available(self) -> bool:
+        return super().available and bool((self.adv.get("now") or {}).get("boiler"))
+
+    @property
+    def native_value(self):
+        return ((self.adv.get("now") or {}).get("boiler") or {}).get(self._field)
+
+    @property
+    def extra_state_attributes(self):
+        return (self.adv.get("now") or {}).get("boiler") or {}

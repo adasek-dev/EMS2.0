@@ -3,7 +3,7 @@ from __future__ import annotations
 
 DOMAIN = "ems2"
 VERSION = "2.0.16"
-DEFAULT_URL = "https://ems20.xnas.cz"
+DEFAULT_URL = ""          # adresu serveru ukazuje portál EMS 2.0 v sekci Připojení
 DEFAULT_PREFIX = "solax"
 
 CONF_URL = "url"
@@ -60,6 +60,8 @@ ADVICE_FLAGS = {
     "negative_sell": ("Záporná výkupní cena", "mdi:cash-lock"),
     "pv_surplus": ("Přebytek FVE", "mdi:solar-power-variant"),
     "good_time_for_appliances": ("Vhodná chvíle pro spotřebiče", "mdi:washing-machine"),
+    "boiler_grid_now": ("Bojler: ohřev ze sítě teď", "mdi:water-boiler"),
+    "boiler_pv_ok": ("Bojler: ohřev z FVE povolen", "mdi:water-boiler-auto"),
 }
 STATE_NAMES = {"pending": "čeká na schválení", "shadow": "zkušební provoz", "control": "řízení", "disabled": "vypnuto"}
 

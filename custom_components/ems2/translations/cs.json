@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "EMS 2.0 – připojení k serveru",
-        "description": "Adresu serveru, Dům ID a token najdeš na webu EMS 2.0 v sekci Token (token se ukáže jen jednou).",
+        "description": "Adresu serveru, Dům ID a token najdeš v portálu EMS 2.0 v sekci Připojení (token se ukáže jen jednou, při vydání).",
         "data": {
           "url": "Adresa serveru",
           "site_id": "Dům ID",

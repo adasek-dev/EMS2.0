@@ -50,7 +50,7 @@ class Ems2ConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._whoami = info
                 return await self.async_step_mode()
         schema = vol.Schema({
-            vol.Required(CONF_URL, default=DEFAULT_URL): str,
+            vol.Required(CONF_URL, default=DEFAULT_URL or vol.UNDEFINED): str,
             vol.Required(CONF_SITE_ID): str,
             vol.Required(CONF_TOKEN): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),
         })

@@ -100,7 +100,7 @@ ale **střídače se nedotkne**. Řízení pak zapnete jedním přepínačem *EM
 
 | Systém | Jak |
 | --- | --- |
-| <img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/homeassistant.svg" width="28"> **Home Assistant** | tato integrace – měření, povely a 62 entit s plánem, cenami a doporučením |
+| <img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/homeassistant.svg" width="28"> **Home Assistant** | tato integrace – měření, povely a 66 entit s plánem, cenami a doporučením |
 | <img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/solax-x.png" width="28"> **SolaX** (hybridní střídače Gen4) | řízení přes integraci [SolaX Inverter Modbus](https://github.com/wills106/homeassistant-solax-modbus) |
 | 🔌 **Jakýkoli jiný střídač** | režim *Jen data a doporučení*: EMS nic neřídí, vy řídíte automatizacemi podle jeho doporučení |
 | <img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/nodered.svg" width="28"> **Node-RED** | hotové flow (i přímo přes Modbus, bez HA) – v portálu v *Návodech* |
@@ -132,7 +132,7 @@ ale **střídače se nedotkne**. Řízení pak zapnete jedním přepínačem *EM
 | `switch.ems2_balancing`, `…_allow_battery_sell`, `…_outage_protection` … | nastavení serveru přímo z HA |
 | `button.ems2_prepocitat` | přepočítat plán hned |
 
-Služby: `ems2.set_tariff`, `ems2.replan`. Všech 62 entit je popsaných v portálu v *Návodech → Entity v HA*.
+Služby: `ems2.set_tariff`, `ems2.replan`. Všech 66 entit je popsaných v portálu v *Návodech → Entity v HA*.
 
 </details>
 
