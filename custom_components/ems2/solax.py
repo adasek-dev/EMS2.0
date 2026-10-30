@@ -25,7 +25,7 @@ GetState = Callable[[str], tuple[str | None, dict]]
 
 MODE1_AUTOREPEAT_S = 900
 MODE8_AUTOREPEAT_S = 900
-MODE8_DURATION_S = 20
+MODE8_DURATION_S = 60        # platnost jednoho zápisu dálkového řízení: vydrží i 2–3 nepovedená čtení Modbusu
 WATCHDOG_S = 60
 STUCK_AFTER_S = 120
 STUCK_COOLDOWN_S = 300
@@ -183,7 +183,8 @@ class SolaxAdapter:
             if changed or slot_changed or watchdog or stuck or target_changed:
                 out += [_sel(e.select_main, main), _sel(e.select_modbus, modbus)]
                 if mode1_active:
-                    out += [_num(e.grid, target), _num(e.active, target), _num(e.autorepeat, MODE1_AUTOREPEAT_S)]
+                    out += [_num(e.grid, target), _num(e.active, target), _num(e.duration_mode8, MODE8_DURATION_S),
+                            _num(e.autorepeat, MODE1_AUTOREPEAT_S)]
                 else:
                     out += [_num(e.autorepeat, 0)]
                 out += [_press(e.apply), _press(e.trigger)]
