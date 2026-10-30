@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "EMS 2.0 – připojení k serveru",
-        "description": "Adresu serveru, Dům ID a token najdeš v portálu EMS 2.0 v sekci Připojení (token se ukáže jen jednou, při vydání).",
+        "description": "Dům ID a token najdeš v portálu EMS 2.0 (app.ems20.cz) v sekci Připojení (token se ukáže jen jednou, při vydání). Adresu serveru nech, jak je – měníš ji jen u vlastního serveru.",
         "data": {
           "url": "Adresa serveru",
           "site_id": "Dům ID",

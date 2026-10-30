@@ -3,7 +3,7 @@ from __future__ import annotations
 
 DOMAIN = "ems2"
 VERSION = "2.0.16"
-DEFAULT_URL = ""          # adresu serveru ukazuje portál EMS 2.0 v sekci Připojení
+DEFAULT_URL = "https://app.ems20.cz"   # vlastní server: přepsat adresou z jeho portálu (Připojení)
 DEFAULT_PREFIX = "solax"
 
 CONF_URL = "url"

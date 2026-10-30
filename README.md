@@ -62,8 +62,8 @@ Raspberry Pi jako na výkonném serveru a vylepšení dostanete bez aktualizace.
 2. **Nainstalujte integraci** – tlačítkem *Otevřít v HACS* nahoře, nebo ručně:
    HACS → ⋮ → *Vlastní repozitáře* → `https://github.com/adasek-dev/EMS2.0`, kategorie **Integrace** → nainstalovat → restart HA.
 3. **V portálu** vyplňte dům, baterii a tarif a v sekci *Připojení* si vygenerujte token.
-4. **V HA** *Nastavení → Zařízení a služby → Přidat integraci → EMS 2.0* a zadejte adresu serveru, Dům ID a token
-   (všechno najdete v portálu v sekci *Připojení*).
+4. **V HA** *Nastavení → Zařízení a služby → Přidat integraci → EMS 2.0* a zadejte Dům ID a token
+   z portálu (sekce *Připojení*). Adresa serveru je předvyplněná.
 
 Hotovo. Prvních 7 dní běží **zkušební provoz**: EMS počítá plán a v portálu vidíte, co by dělalo a kolik by ušetřilo,
 ale **střídače se nedotkne**. Řízení pak zapnete jedním přepínačem *EMS řídí*.

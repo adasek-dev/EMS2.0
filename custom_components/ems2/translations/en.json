@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "EMS 2.0 – connect to server",
-        "description": "Server URL, house ID and token are in the EMS 2.0 portal (Připojení / Connection page).",
+        "description": "House ID and token are in the EMS 2.0 portal (app.ems20.cz, Připojení / Connection page). Keep the server URL unless you run your own server.",
         "data": {
           "url": "Server URL",
           "site_id": "House ID",
