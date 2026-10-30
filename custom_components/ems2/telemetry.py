@@ -35,7 +35,7 @@ KINDS = {"soc": "pct", "pv_w": "power", "load_w": "power", "grid_w": "power", "g
 
 
 def build_sample(get_state: GetState, entities: dict[str, str], ts_iso: str, *, grid_invert: bool = False,
-                 mode: str | None = None, ctl: str | None = None,
+                 battery_invert: bool = False, mode: str | None = None, ctl: str | None = None,
                  extra: dict[str, str] | None = None) -> dict:
     s: dict = {"ts": ts_iso}
     for key, kind in KINDS.items():
@@ -46,6 +46,8 @@ def build_sample(get_state: GetState, entities: dict[str, str], ts_iso: str, *, 
         for k in ("grid_w", "grid_l1_w", "grid_l2_w", "grid_l3_w"):
             if k in s:
                 s[k] = -s[k]
+    if battery_invert and "battery_w" in s:
+        s["battery_w"] = -s["battery_w"]
     if "grid_w" not in s and "grid_l1_w" in s:
         s["grid_w"] = round(s.get("grid_l1_w", 0) + s.get("grid_l2_w", 0) + s.get("grid_l3_w", 0), 3)
     if "soc" in s:

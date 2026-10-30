@@ -12,8 +12,9 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import EmsApi, EmsApiError, EmsAuthError
-from .const import (CONF_ENTITIES, CONF_GRID_INVERT, CONF_PREFIX, CONF_SITE_ID, CONF_TOKEN, CONF_URL, DEFAULT_PREFIX,
-                    DEFAULT_URL, DOMAIN, TELEMETRY_DEFAULTS, TELEMETRY_KEYS)
+from .const import (CONF_BATTERY_INVERT, CONF_CONTROL, CONF_ENTITIES, CONF_GRID_INVERT, CONF_PREFIX, CONF_SITE_ID,
+                    CONF_TOKEN, CONF_URL, CONTROL_NONE, CONTROL_SOLAX, DEFAULT_PREFIX, DEFAULT_URL, DOMAIN,
+                    GENERIC_KEYS, TELEMETRY_DEFAULTS, TELEMETRY_KEYS)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,13 +48,50 @@ class Ems2ConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
                 self._data.update(user_input)
                 self._whoami = info
-                return await self.async_step_inverter()
+                return await self.async_step_mode()
         schema = vol.Schema({
             vol.Required(CONF_URL, default=DEFAULT_URL): str,
             vol.Required(CONF_SITE_ID): str,
             vol.Required(CONF_TOKEN): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),
         })
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
+
+    async def async_step_mode(self, user_input: dict | None = None) -> ConfigFlowResult:
+        """Řídit střídač SolaX, nebo jen posílat data a dostávat doporučení."""
+        return self.async_show_menu(step_id="mode", menu_options=["inverter", "generic"],
+                                    description_placeholders={"site": self._whoami.get("name", "")})
+
+    def _api(self) -> EmsApi:
+        return EmsApi(async_get_clientsession(self.hass), self._data[CONF_URL], self._data[CONF_SITE_ID],
+                      self._data[CONF_TOKEN])
+
+    async def _house_or_create(self) -> ConfigFlowResult:
+        try:
+            cfg = (await self._api().config()).get("config", {})
+        except EmsApiError:
+            cfg = {}
+        if not cfg.get("pv_arrays"):
+            return await self.async_step_house()
+        return self._create()
+
+    async def async_step_generic(self, user_input: dict | None = None) -> ConfigFlowResult:
+        """Jen data a doporučení: libovolné entity měření, integrace nic neřídí."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            ents = {k: user_input[k] for k in GENERIC_KEYS if user_input.get(k)}
+            if self.hass.states.get(ents.get("soc", "")) is None:
+                errors["soc"] = "entity_missing"
+            else:
+                self._data.update({CONF_CONTROL: CONTROL_NONE, CONF_ENTITIES: ents,
+                                   CONF_GRID_INVERT: user_input.get(CONF_GRID_INVERT, False),
+                                   CONF_BATTERY_INVERT: user_input.get(CONF_BATTERY_INVERT, False)})
+                try:
+                    await self._api().patch_settings({"advice_only": True})
+                except EmsApiError as e:
+                    _LOGGER.warning("EMS 2.0: nastavit „jen doporučení“ se nepovedlo: %s", e.message)
+                return await self._house_or_create()
+        return self.async_show_form(step_id="generic", data_schema=_generic_schema({}), errors=errors,
+                                    description_placeholders={"site": self._whoami.get("name", "")})
 
     async def async_step_inverter(self, user_input: dict | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
@@ -62,16 +100,9 @@ class Ems2ConfigFlow(ConfigFlow, domain=DOMAIN):
             if self.hass.states.get(TELEMETRY_DEFAULTS["soc"].format(p=prefix)) is None:
                 errors[CONF_PREFIX] = "entity_missing"
             else:
-                self._data.update({CONF_PREFIX: prefix, CONF_GRID_INVERT: user_input.get(CONF_GRID_INVERT, False)})
-                api = EmsApi(async_get_clientsession(self.hass), self._data[CONF_URL], self._data[CONF_SITE_ID],
-                             self._data[CONF_TOKEN])
-                try:
-                    cfg = (await api.config()).get("config", {})
-                except EmsApiError:
-                    cfg = {}
-                if not cfg.get("pv_arrays"):
-                    return await self.async_step_house()
-                return self._create()
+                self._data.update({CONF_CONTROL: CONTROL_SOLAX, CONF_PREFIX: prefix,
+                                   CONF_GRID_INVERT: user_input.get(CONF_GRID_INVERT, False)})
+                return await self._house_or_create()
         schema = vol.Schema({
             vol.Required(CONF_PREFIX, default=DEFAULT_PREFIX): str,
             vol.Optional(CONF_GRID_INVERT, default=False): bool,
@@ -154,11 +185,27 @@ class Ems2ConfigFlow(ConfigFlow, domain=DOMAIN):
         return Ems2OptionsFlow()
 
 
+def _generic_schema(opts: dict) -> vol.Schema:
+    cur = opts.get(CONF_ENTITIES) or {}
+    sel = selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor"))
+    fields: dict = {}
+    for k in GENERIC_KEYS:
+        if k == "soc":
+            fields[vol.Required(k, description={"suggested_value": cur.get(k)})] = sel
+        else:
+            fields[vol.Optional(k, description={"suggested_value": cur.get(k)})] = sel
+    fields[vol.Optional(CONF_GRID_INVERT, default=opts.get(CONF_GRID_INVERT, False))] = bool
+    fields[vol.Optional(CONF_BATTERY_INVERT, default=opts.get(CONF_BATTERY_INVERT, False))] = bool
+    return vol.Schema(fields)
+
+
 class Ems2OptionsFlow(OptionsFlow):
     """Vlastní entity pro měření (když se liší od výchozích entit SolaX Modbus)."""
 
     async def async_step_init(self, user_input: dict | None = None) -> ConfigFlowResult:
         opts = {**self.config_entry.data, **self.config_entry.options}
+        if opts.get(CONF_CONTROL) == CONTROL_NONE:
+            return await self.async_step_generic()
         prefix = opts.get(CONF_PREFIX) or DEFAULT_PREFIX
         current = opts.get(CONF_ENTITIES) or {}
         if user_input is not None:
@@ -175,3 +222,12 @@ class Ems2OptionsFlow(OptionsFlow):
             fields[vol.Optional(k, description={"suggested_value": default})] = selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor"))
         return self.async_show_form(step_id="init", data_schema=vol.Schema(fields))
+
+    async def async_step_generic(self, user_input: dict | None = None) -> ConfigFlowResult:
+        opts = {**self.config_entry.data, **self.config_entry.options}
+        if user_input is not None:
+            return self.async_create_entry(data={
+                CONF_CONTROL: CONTROL_NONE, CONF_ENTITIES: {k: user_input[k] for k in GENERIC_KEYS if user_input.get(k)},
+                CONF_GRID_INVERT: user_input.get(CONF_GRID_INVERT, False),
+                CONF_BATTERY_INVERT: user_input.get(CONF_BATTERY_INVERT, False)})
+        return self.async_show_form(step_id="generic", data_schema=_generic_schema(opts))

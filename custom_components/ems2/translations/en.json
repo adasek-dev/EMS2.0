@@ -43,13 +43,38 @@
         "data": {
           "token": "Token"
         }
+      },
+      "mode": {
+        "title": "Jak má EMS 2.0 pracovat?",
+        "description": "Dům: {site}.",
+        "menu_options": {
+          "inverter": "Řídit střídač SolaX (Modbus)",
+          "generic": "Jen data a doporučení – EMS nic neřídí, jakýkoli střídač"
+        }
+      },
+      "generic": {
+        "title": "Jen data a doporučení",
+        "description": "Dům: {site}. Vyber entity měření. Integrace je bude posílat na server a z plánu vytvoří senzory s doporučením (režim, levná/drahá elektřina, nejlevnější okna…) pro tvoje automatizace. Střídač neovládá.",
+        "data": {
+          "soc": "SOC baterie (%) – povinné",
+          "pv_w": "Výkon FVE",
+          "load_w": "Spotřeba domu (když chybí, server ji dopočítá)",
+          "grid_w": "Výkon sítě (+ dodávka do sítě)",
+          "battery_w": "Výkon baterie (+ nabíjení)",
+          "grid_l1_w": "Síť L1",
+          "grid_l2_w": "Síť L2",
+          "grid_l3_w": "Síť L3",
+          "pv_today_kwh": "Výroba FVE dnes",
+          "grid_invert": "Obrátit znaménko sítě (když + znamená odběr)",
+          "battery_invert": "Obrátit znaménko baterie (když + znamená vybíjení)"
+        }
       }
     },
     "error": {
       "invalid_auth": "Invalid token or house ID.",
       "cannot_connect": "Cannot connect.",
       "unknown": "Unexpected server error (house may not be approved yet).",
-      "entity_missing": "Entity sensor.PREFIX_battery_capacity not found – check the prefix.",
+      "entity_missing": "Entita neexistuje – u SolaXu zkontroluj prefix (např. solax), jinak vyber SOC baterie.",
       "invalid_config": "Server rejected the values."
     },
     "abort": {
@@ -74,6 +99,23 @@
           "battery_w": "Výkon baterie (+ nabíjení)",
           "pv_today_kwh": "Výroba FVE dnes",
           "inverter_state": "Stav střídače (run mode)"
+        }
+      },
+      "generic": {
+        "title": "EMS 2.0 – entity měření",
+        "description": "Režim jen data a doporučení.",
+        "data": {
+          "soc": "SOC baterie (%) – povinné",
+          "pv_w": "Výkon FVE",
+          "load_w": "Spotřeba domu (když chybí, server ji dopočítá)",
+          "grid_w": "Výkon sítě (+ dodávka do sítě)",
+          "battery_w": "Výkon baterie (+ nabíjení)",
+          "grid_l1_w": "Síť L1",
+          "grid_l2_w": "Síť L2",
+          "grid_l3_w": "Síť L3",
+          "pv_today_kwh": "Výroba FVE dnes",
+          "grid_invert": "Obrátit znaménko sítě (když + znamená odběr)",
+          "battery_invert": "Obrátit znaménko baterie (když + znamená vybíjení)"
         }
       }
     }

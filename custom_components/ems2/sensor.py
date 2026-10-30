@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import MODE_NAMES, STATE_NAMES
+from .const import MODE_NAMES, PRICE_LEVELS, STATE_NAMES
 from .entity import Ems2Entity
 
 
@@ -19,6 +19,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         PlanCost(c, "tomorrow"), Accounting(c, "cost_kc", "naklady_dnes", "Náklady dnes"),
         Accounting(c, "savings_kc", "uspora_dnes", "Úspora dnes"), BatteryTarget(c),
         HdoTariff(c), HdoNextSwitch(c),
+        Advice(c), PriceLevel(c), AdviceSocTarget(c), Billing(c),
+        AdviceTime(c, "okno_levne_1h", "Nejlevnější hodina", ("cheapest", 1), "mdi:clock-check"),
+        AdviceTime(c, "okno_levne_2h", "Nejlevnější 2 h", ("cheapest", 2), "mdi:clock-check"),
+        AdviceTime(c, "okno_levne_3h", "Nejlevnější 3 h", ("cheapest", 3), "mdi:clock-check"),
+        AdviceTime(c, "dalsi_nabijeni", "Další nabíjení ze sítě", ("block", "next_grid_charge"), "mdi:battery-clock"),
+        AdviceTime(c, "dalsi_prodej", "Další prodej z baterie", ("block", "next_sell"), "mdi:cash-clock"),
+        AdviceEnergy(c, "fve_zbytek_dne", "FVE zbytek dne", ("today_rest", "pv_kwh"), "mdi:solar-power"),
+        AdviceEnergy(c, "fve_zitra", "FVE zítra", ("tomorrow", "pv_kwh"), "mdi:solar-power"),
+        AdviceEnergy(c, "spotreba_zbytek_dne", "Spotřeba zbytek dne", ("today_rest", "load_kwh"), "mdi:home-lightning-bolt"),
+        AdviceEnergy(c, "spotreba_zitra", "Spotřeba zítra", ("tomorrow", "load_kwh"), "mdi:home-lightning-bolt"),
     ])
 
 
@@ -186,3 +196,131 @@ class HdoNextSwitch(_Hdo):
     @property
     def extra_state_attributes(self):
         return {"next_tariff": self.hdo.get("next_tariff"), "remaining_min": self.hdo.get("remaining_min")}
+
+
+# ── doporučení (posílá server v povelu jako `advice`) ───────────────
+class _Advice(Ems2Entity, SensorEntity):
+    @property
+    def adv(self) -> dict:
+        return self.d.get("advice") or {}
+
+    @property
+    def available(self) -> bool:
+        return super().available and bool(self.adv)
+
+
+class Advice(_Advice):
+    """Doporučený režim teď – pro vlastní řízení (stav = klíč režimu, atributy = podrobnosti)."""
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = list(MODE_NAMES)
+
+    def __init__(self, c):
+        super().__init__(c, "doporuceni", "Doporučení", "mdi:lightbulb-auto")
+
+    @property
+    def native_value(self):
+        return (self.adv.get("now") or {}).get("mode")
+
+    @property
+    def extra_state_attributes(self):
+        n, nx = self.adv.get("now") or {}, self.adv.get("next") or {}
+        return {"mode_name": n.get("mode_name"), "reason": n.get("reason"), "battery_w": n.get("battery_w"),
+                "grid_w": n.get("grid_w"), "soc_target": n.get("soc_target"), "soc_min": n.get("soc_min"),
+                "soc_max": n.get("soc_max"), "until": n.get("until"), "buy": n.get("buy"), "sell": n.get("sell"),
+                "effective_price": n.get("effective_price"), "pv_surplus_w": n.get("pv_surplus_w"),
+                "next_mode": nx.get("mode"), "next_mode_name": nx.get("mode_name"), "next_start": nx.get("start"),
+                "flags": self.adv.get("flags"), "advice_only": self.d.get("advice_only")}
+
+
+class PriceLevel(_Advice):
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = PRICE_LEVELS
+
+    def __init__(self, c):
+        super().__init__(c, "cenova_hladina", "Cenová hladina", "mdi:scale-unbalanced")
+
+    @property
+    def native_value(self):
+        return (self.adv.get("now") or {}).get("price_level")
+
+    @property
+    def extra_state_attributes(self):
+        n = self.adv.get("now") or {}
+        return {"price_rank": n.get("price_rank"), "buy": n.get("buy"), "sell": n.get("sell"), "spot": n.get("spot")}
+
+
+class AdviceSocTarget(_Advice):
+    _attr_native_unit_of_measurement = "%"
+    _attr_device_class = SensorDeviceClass.BATTERY
+
+    def __init__(self, c):
+        super().__init__(c, "cil_soc", "Doporučený cíl SOC", "mdi:battery-arrow-up-outline")
+
+    @property
+    def native_value(self):
+        return (self.adv.get("now") or {}).get("soc_target")
+
+
+class AdviceTime(_Advice):
+    """Začátek okna (nejlevnější souvislé hodiny, další nabíjení / prodej)."""
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(self, c, key, name, spec, icon):
+        super().__init__(c, key, name, icon)
+        self._spec = spec
+
+    def _item(self) -> dict | None:
+        w = self.adv.get("windows") or {}
+        kind, arg = self._spec
+        if kind == "cheapest":
+            return next((x for x in w.get("cheapest") or [] if x.get("hours") == arg), None)
+        return w.get(arg)
+
+    @property
+    def native_value(self):
+        it = self._item()
+        return dt_util.parse_datetime(it["start"]) if it else None
+
+    @property
+    def extra_state_attributes(self):
+        it = self._item() or {}
+        return {k: it.get(k) for k in ("end", "from", "to", "day", "avg_price", "minutes_to_start", "grid_charge_kwh",
+                                       "sell_kwh", "soc_end") if k in it}
+
+
+class AdviceEnergy(_Advice):
+    _attr_native_unit_of_measurement = "kWh"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_suggested_display_precision = 1
+
+    def __init__(self, c, key, name, spec, icon):
+        super().__init__(c, key, name, icon)
+        self._spec = spec
+
+    @property
+    def native_value(self):
+        part = (self.adv.get("forecast") or {}).get(self._spec[0]) or {}
+        return part.get(self._spec[1])
+
+
+class Billing(Ems2Entity, SensorEntity):
+    """Odhad vyúčtování na konci zúčtovacího období: + přeplatek, − nedoplatek (Kč)."""
+    _attr_native_unit_of_measurement = "CZK"
+    _attr_suggested_display_precision = 0
+
+    def __init__(self, c):
+        super().__init__(c, "vyuctovani", "Vyúčtování – odhad přeplatku", "mdi:receipt-text-check")
+
+    @property
+    def available(self) -> bool:
+        return super().available and bool(self.d.get("billing"))
+
+    @property
+    def native_value(self):
+        return (self.d.get("billing") or {}).get("balance_end")
+
+    @property
+    def extra_state_attributes(self):
+        b = self.d.get("billing") or {}
+        return {k: b.get(k) for k in ("start", "end", "cost_now", "paid_now", "balance_now", "projected", "advances_total",
+                                      "fixed_month", "energy_kwh", "recommended", "recommended_rest", "forecast_basis")}

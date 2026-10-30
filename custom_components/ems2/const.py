@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 DOMAIN = "ems2"
-VERSION = "2.0.14"
+VERSION = "2.0.16"
 DEFAULT_URL = "https://ems20.xnas.cz"
 DEFAULT_PREFIX = "solax"
 
@@ -12,6 +12,12 @@ CONF_TOKEN = "token"
 CONF_PREFIX = "prefix"
 CONF_GRID_INVERT = "grid_invert"
 CONF_ENTITIES = "entities"
+CONF_CONTROL = "control"          # "solax" = integrace řídí SolaX, "none" = jen data a doporučení
+CONF_BATTERY_INVERT = "battery_invert"
+CONTROL_SOLAX = "solax"
+CONTROL_NONE = "none"
+# režim „jen data a doporučení“: entity, které se dají vybrat (soc povinné)
+GENERIC_KEYS = ["soc", "pv_w", "load_w", "grid_w", "battery_w", "grid_l1_w", "grid_l2_w", "grid_l3_w", "pv_today_kwh"]
 
 UPDATE_INTERVAL_S = 5           # telemetrie + povel každých 5 s
 INFO_INTERVAL_S = 300           # whoami, nastavení, plán
@@ -40,6 +46,20 @@ MODE_NAMES = {
     "sell": "prodej z baterie",
     "pv_export": "FVE do sítě",
     "no_export": "nic do sítě",
+}
+PRICE_LEVELS = ["levná", "běžná", "drahá"]
+# příznaky doporučení → binární senzory (klíč, název, ikona)
+ADVICE_FLAGS = {
+    "charge_from_grid": ("Doporučení: nabíjet ze sítě", "mdi:battery-charging"),
+    "discharge_allowed": ("Doporučení: baterie smí vybíjet", "mdi:battery-arrow-down"),
+    "sell_from_battery": ("Doporučení: prodávat z baterie", "mdi:cash-plus"),
+    "export_allowed": ("Doporučení: dodávka do sítě povolena", "mdi:transmission-tower-export"),
+    "cheap_now": ("Levná elektřina teď", "mdi:cash-check"),
+    "expensive_now": ("Drahá elektřina teď", "mdi:cash-remove"),
+    "negative_buy": ("Záporná cena nákupu", "mdi:cash-minus"),
+    "negative_sell": ("Záporná výkupní cena", "mdi:cash-lock"),
+    "pv_surplus": ("Přebytek FVE", "mdi:solar-power-variant"),
+    "good_time_for_appliances": ("Vhodná chvíle pro spotřebiče", "mdi:washing-machine"),
 }
 STATE_NAMES = {"pending": "čeká na schválení", "shadow": "zkušební provoz", "control": "řízení", "disabled": "vypnuto"}
 

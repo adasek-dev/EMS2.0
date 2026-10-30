@@ -4,12 +4,13 @@
   "codeowners": [],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://ems20.xnas.cz/web/",
+  "documentation": "https://github.com/adasek-dev/EMS2.0",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "requirements": [],
-  "version": "2.0.14",
+  "version": "2.0.16",
   "after_dependencies": [
     "recorder"
-  ]
+  ],
+  "issue_tracker": "https://github.com/adasek-dev/EMS2.0/issues"
 }

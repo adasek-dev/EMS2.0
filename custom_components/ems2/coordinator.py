@@ -21,8 +21,9 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from .api import EmsApi, EmsApiError, EmsAuthError
-from .const import (ACCOUNTING_INTERVAL_S, BUFFER_MAX, CONF_ENTITIES, CONF_GRID_INVERT, CONF_PREFIX, DEFAULT_PREFIX,
-                    DOMAIN, INFO_INTERVAL_S, OFFLINE_FALLBACK_S, TELEMETRY_DEFAULTS, UPDATE_INTERVAL_S)
+from .const import (ACCOUNTING_INTERVAL_S, BUFFER_MAX, CONF_BATTERY_INVERT, CONF_CONTROL, CONF_ENTITIES, CONF_GRID_INVERT,
+                    CONF_PREFIX, CONTROL_NONE, DEFAULT_PREFIX, DOMAIN, INFO_INTERVAL_S, OFFLINE_FALLBACK_S,
+                    TELEMETRY_DEFAULTS, UPDATE_INTERVAL_S)
 from . import heating, switching
 from .heating import HeatingControl
 from .solax import SolaxAdapter, SolaxEntities, safe_mode
@@ -39,9 +40,11 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         self.api = api
         opts = {**entry.data, **entry.options}
         prefix = opts.get(CONF_PREFIX) or DEFAULT_PREFIX
-        self.entities = {k: v.format(p=prefix) for k, v in TELEMETRY_DEFAULTS.items()}
+        self.advice_only = opts.get(CONF_CONTROL) == CONTROL_NONE     # jen data a doporučení, nic neřídit
+        self.entities = {} if self.advice_only else {k: v.format(p=prefix) for k, v in TELEMETRY_DEFAULTS.items()}
         self.entities.update({k: v for k, v in (opts.get(CONF_ENTITIES) or {}).items() if v})
         self.grid_invert = bool(opts.get(CONF_GRID_INVERT, False))
+        self.battery_invert = bool(opts.get(CONF_BATTERY_INVERT, False))
         self.adapter = SolaxAdapter(SolaxEntities(prefix))
         self.buffer: deque[dict] = deque(maxlen=BUFFER_MAX)
         self.last_ok: float | None = None
@@ -52,6 +55,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         self.settings: dict = {}
         self.plan: dict = {}
         self.accounting: dict = {}
+        self.billing: dict = {}
         self.applied: dict = {"mode": None, "reason": "zatím nic", "controlling": False}
         self._controlling = False
         self.heating = HeatingControl()
@@ -108,7 +112,8 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
     async def _async_update_data(self) -> dict:
         now = dt_util.utcnow()
         sample = build_sample(self._get_state, self.entities, now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                              grid_invert=self.grid_invert, mode=self.applied.get("mode"),
+                              grid_invert=self.grid_invert, battery_invert=self.battery_invert,
+                              mode=self.applied.get("mode"),
                               ctl=self._ctl_text())
         hc = self._heat_cfg()
         heat_on, heat_w = heating.read(self._get_state, hc.get("state_entity"), hc.get("power_entity"))
@@ -159,6 +164,10 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
                                                        "ems2_load_history")
             if time.monotonic() - self._last_acc >= ACCOUNTING_INTERVAL_S:
                 self.accounting = (await self.api.accounting_today()).get("total", {})
+                try:
+                    self.billing = await self.api.billing()
+                except EmsApiError as e:            # starší server bez vyúčtování
+                    _LOGGER.debug("EMS 2.0 vyúčtování: %s", e)
                 self._last_acc = time.monotonic()
         except EmsAuthError as e:
             self.connected = False
@@ -189,6 +198,10 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
                 _LOGGER.warning("EMS 2.0: %s %s selhalo: %s", service, data["entity_id"], e)
 
     async def _apply(self, now, soc: float | None) -> None:
+        if self.advice_only:
+            self.applied = {"mode": None, "reason": "jen data a doporučení – integrace střídač neřídí",
+                            "controlling": False}
+            return
         offline = (time.monotonic() - self.last_ok) if self.last_ok else 1e9
         mode, grid_w, slot, reason = safe_mode(self.command, soc, now.strftime("%Y-%m-%dT%H:%M:%SZ"),
                                                offline, OFFLINE_FALLBACK_S)
@@ -240,6 +253,13 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         """Pošle serveru hodinové průměry spotřeby domu z dlouhodobé statistiky HA."""
         entity = self.entities.get("load_w")
         body: dict[str, Any] = {"entity": entity}
+        if not entity:
+            body = {"entity": "", "error": "v integraci není vybraná entita spotřeby domu"}
+            try:
+                await self.api.load_history(body)
+            except EmsApiError:
+                pass
+            return
         try:
             from homeassistant.components.recorder import get_instance
             from homeassistant.components.recorder.statistics import statistics_during_period
@@ -267,7 +287,9 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
     def snapshot(self) -> dict[str, Any]:
         return {"command": self.command, "applied": self.applied, "info": self.info, "settings": self.settings,
                 "plan": self.plan, "accounting": self.accounting, "connected": self.connected,
-                "last_error": self.last_error, "buffered": len(self.buffer)}
+                "last_error": self.last_error, "buffered": len(self.buffer),
+                "advice": (self.command or {}).get("advice"), "advice_only": self.advice_only,
+                "billing": self.billing}
 
     # ── zápisy z entit ───────────────────────────────────────────
     async def patch_setting(self, key: str, value: Any) -> None:
