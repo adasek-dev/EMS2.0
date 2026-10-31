@@ -190,7 +190,8 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         if not self.command or offline > OFFLINE_FALLBACK_S:
             return                      # bez serveru zařízení nechat, jak jsou
         for domain, service, data in switching.calls(self._get_state, self.command.get("devices"),
-                                                     self._dev_last, time.monotonic()):
+                                                     self._dev_last, time.monotonic()) + \
+                switching.value_calls(self._get_state, self.command.get("set_values"), self._dev_last, time.monotonic()):
             try:
                 await self.hass.services.async_call(domain, service, data, blocking=True)
                 _LOGGER.info("EMS 2.0: %s %s", service, data["entity_id"])

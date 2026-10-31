@@ -59,3 +59,25 @@ def calls(get_state: GetState, devices: list | None, last: dict, now: float) -> 
         last[ent] = (want, now)
         out.append(("homeassistant", "turn_on" if want else "turn_off", {"entity_id": ent}))
     return out
+
+
+def value_calls(get_state: GetState, items: list | None, last: dict, now: float) -> list[tuple[str, str, dict]]:
+    """Hodnoty, které server chce nastavit v HA (input_number / number – třeba teplotu bojleru ze stránky Zařízení)."""
+    out = []
+    for it in (items or [])[:10]:
+        ent, val = it.get("entity") or "", it.get("value")
+        domain = ent.split(".", 1)[0]
+        if domain not in ("input_number", "number") or val is None:
+            continue
+        st, _ = get_state(ent)
+        try:
+            if st is not None and abs(float(st) - float(val)) < 0.01:
+                continue
+        except (TypeError, ValueError):
+            pass
+        prev = last.get(ent)
+        if prev and prev[0] == val and now - prev[1] < RETRY_S:
+            continue
+        last[ent] = (val, now)
+        out.append((domain, "set_value", {"entity_id": ent, "value": val}))
+    return out
