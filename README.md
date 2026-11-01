@@ -24,6 +24,37 @@
   <img src="https://raw.githubusercontent.com/adasek-dev/EMS2.0/main/images/prehled.webp" alt="Přehled domu v EMS 2.0: tok energie, režim teď a co EMS udělá dál" width="900">
 </p>
 
+<p align="center"><a href="#english">🇬🇧 English summary</a> · <a href="#proč-to-zkusit">🇨🇿 Česky</a></p>
+
+<a id="english"></a>
+
+## English summary
+
+**EMS 2.0 is a simple energy management system for Home Assistant.** Every 15 minutes it plans when your home
+battery should charge from the grid, save energy, or sell – and when to heat the hot-water boiler – based on
+**spot prices, your tariff, a solar (PV) forecast and a consumption forecast** learned from your own house.
+
+Think of it as an **easy alternative to [EMHASS](https://github.com/davidusb-geek/emhass)**: the same idea
+(optimization by price and forecast), but set up in 10 minutes from a web portal instead of YAML and add-on
+configuration.
+
+| | EMS 2.0 | EMHASS |
+| --- | --- | --- |
+| Setup | web portal, HACS integration, no YAML | add-on or Docker, configuration file and HA automations calling its API |
+| Where it runs | optimization on the EMS 2.0 server (cloud), HA sends data and executes commands | fully local in your Home Assistant |
+| Forecasts | PV per roof side, learned house consumption, spot price prediction | PV and load forecast, configurable |
+| Extras | boiler planning, balancing, outage protection (weather alerts), plan editing, mobile web app | very flexible, many optimization options |
+| Market | **Czech Republic** (OTE spot prices, Czech tariffs and HDO) | any market |
+
+- **Optimizer:** MILP (linear programming) over 2–4 days with battery wear cost, grid limits and VT/NT tariffs.
+- **Inverters:** SolaX (Gen4) control via [SolaX Modbus](https://github.com/wills106/homeassistant-solax-modbus);
+  any other inverter in *advice only* mode (your automations follow EMS recommendations). Node-RED and MQTT supported.
+- **Safe start:** 7-day shadow mode – EMS plans and shows savings without touching the inverter.
+
+**Install:** HACS → ⋮ → *Custom repositories* → `https://github.com/adasek-dev/EMS2.0` (Integration), then register
+your house at **[ems20.cz](https://ems20.cz)** and add the *EMS 2.0* integration with your house ID and token.
+The portal and documentation are in Czech.
+
 ---
 
 ## Proč to zkusit
