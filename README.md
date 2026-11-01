@@ -6,7 +6,8 @@
 
 <p align="center">
   <b>Baterie, která ví, kdy je elektřina levná.</b><br>
-  Každou čtvrthodinu spočítá, kdy nabíjet, kdy šetřit a kdy prodávat – podle vašeho tarifu, spotových cen a předpovědi slunce.
+  Každou čtvrthodinu spočítá, kdy nabíjet, kdy šetřit a kdy prodávat – podle vašeho tarifu, spotových cen a předpovědi slunce.<br>
+  Umí i <b>dynamický tarif ČEZ</b> s cenovými pásmy.
 </p>
 
 <p align="center">
@@ -33,6 +34,7 @@
 **EMS 2.0 is a simple energy management system for Home Assistant.** Every 15 minutes it plans when your home
 battery should charge from the grid, save energy, or sell – and when to heat the hot-water boiler – based on
 **spot prices, your tariff, a solar (PV) forecast and a consumption forecast** learned from your own house.
+Supports spot tariffs, fixed VT/NT tariffs and the **ČEZ dynamic tariff** (time-of-use price bands).
 
 Think of it as an **easy alternative to [EMHASS](https://github.com/davidusb-geek/emhass)**: the same idea
 (optimization by price and forecast), but set up in 10 minutes from a web portal instead of YAML and add-on
@@ -44,7 +46,7 @@ configuration.
 | Where it runs | optimization on the EMS 2.0 server (cloud), HA sends data and executes commands | fully local in your Home Assistant |
 | Forecasts | PV per roof side, learned house consumption, spot price prediction | PV and load forecast, configurable |
 | Extras | boiler planning, balancing, outage protection (weather alerts), plan editing, mobile web app | very flexible, many optimization options |
-| Market | **Czech Republic** (OTE spot prices, Czech tariffs and HDO) | any market |
+| Market | **Czech Republic** (OTE spot prices, ČEZ dynamic tariff, Czech tariffs and HDO) | any market |
 
 - **Optimizer:** MILP (linear programming) over 2–4 days with battery wear cost, grid limits and VT/NT tariffs.
 - **Inverters:** SolaX (Gen4) control via [SolaX Modbus](https://github.com/wills106/homeassistant-solax-modbus);
@@ -64,7 +66,7 @@ bude zataženo, ani že se právě vyplatí prodat. **EMS 2.0 to ví** a podle t
 
 | Co získáte | Jak |
 | --- | --- |
-| ⚡ **Levnější elektřina** | Nabíjí ze sítě jen v levných hodinách a baterii šetří na drahé. Spot i fixní tarif, VT/NT podle HDO. |
+| ⚡ **Levnější elektřina** | Nabíjí ze sítě jen v levných hodinách a baterii šetří na drahé. **Dynamický tarif ČEZ** (cenová pásma), spot i fixní tarif, VT/NT podle HDO. |
 | ☀️ **Ví, kolik zítra vyrobíte** | Předpověď výroby z počasí pro každou stranu střechy a model spotřeby, který se učí z vašeho domu. |
 | 💰 **Prodej ve správnou chvíli** | Přebytek FVE i energie z baterie jde do sítě, když se to opravdu vyplatí. |
 | 🔮 **Predikce spotových cen** | Plánuje i dny, které OTE ještě nevyhlásil – a ukazuje, jak přesná predikce byla. |
@@ -170,7 +172,8 @@ Služby: `ems2.set_tariff`, `ems2.replan`. Všech 66 entit je popsaných v port�
 <details>
 <summary><b>Časté otázky</b></summary>
 
-**Musím mít spotový tarif?** Ne. EMS umí fixní tarif s VT/NT i dynamický a spotový nákup a výkup.
+**Musím mít spotový tarif?** Ne. EMS umí fixní tarif s VT/NT, dynamický tarif ČEZ s cenovými pásmy (je hotový jako šablona)
+i spotový nákup a výkup.
 
 **Co když server vypadne?** Střídač se do 10 minut sám vrátí do běžného provozu, jako by EMS nebylo.
 
