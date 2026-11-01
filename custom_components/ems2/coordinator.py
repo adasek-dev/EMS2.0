@@ -26,7 +26,7 @@ from .const import (ACCOUNTING_INTERVAL_S, BUFFER_MAX, CONF_BATTERY_INVERT, CONF
                     TELEMETRY_DEFAULTS, UPDATE_INTERVAL_S)
 from . import heating, switching
 from .heating import HeatingControl
-from .solax import SolaxAdapter, SolaxEntities, safe_mode
+from .solax import SolaxAdapter, SolaxEntities, chosen_soc_max, safe_mode
 from .telemetry import build_sample, history_points, sensor_values
 
 _LOGGER = logging.getLogger(__name__)
@@ -236,7 +236,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
             g = heating.charge_grid_target(self.command, slot, pv_w, load_w)
             if g is not None:
                 grid_w = g                    # nabíjet plánovaným výkonem bez ohledu na to, kolik dům zrovna bere
-        calls = self.adapter.calls_for(mode, grid_w, slot, self._get_state)
+        calls = self.adapter.calls_for(mode, grid_w, slot, self._get_state, soc_max=chosen_soc_max(self.command, slot))
         error = None
         for domain, service, data in calls:
             try:

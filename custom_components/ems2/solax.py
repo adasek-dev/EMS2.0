@@ -53,6 +53,8 @@ class SolaxEntities:
         self.duration_mode8 = f"number.{p}_remotecontrol_duration"
         self.trigger_mode8 = f"button.{p}_powercontrolmode8_trigger"
         self.run_mode = f"sensor.{p}_run_mode"
+        # horní mez nabití v dálkovém řízení – některé střídače ji drží i v Mode 1 (např. 95 %)
+        self.target_soc = f"number.{p}_remotecontrol_target_soc_8_9"
 
     def required(self) -> list[str]:
         return [self.select_main, self.select_modbus, self.trigger, self.autorepeat,
@@ -90,6 +92,7 @@ class SolaxAdapter:
     want_normal_since: float | None = None
     last_stuck_reset: float = -1e9
     applied_mode: str | None = None
+    target_soc_saved: float | None = None     # původní cílový SOC (vrátí se po nabíjení na vyšší strop)
 
     def _num_state(self, get_state: GetState, e: str, default: float = 0.0) -> float:
         s, _ = get_state(e)
@@ -102,12 +105,32 @@ class SolaxAdapter:
         self.last_main = self.last_modbus = self.last_slot = None
         self.last_target = None
 
+    def _target_soc_calls(self, mode: str, soc_max: float | None, get_state: GetState) -> list[Call]:
+        """Nabíjení na vyšší strop (balancing, ochrana, strop 100 %) než cílový SOC dálkového řízení:
+        cílový SOC dočasně zvednout a po nabíjení vrátit původní hodnotu."""
+        s, _ = get_state(self.ent.target_soc)
+        try:
+            cur = float(s)
+        except (TypeError, ValueError):
+            return []                       # entita chybí nebo je nedostupná
+        if mode == "charge" and soc_max is not None and cur < float(soc_max) - 0.5:
+            if self.target_soc_saved is None:
+                self.target_soc_saved = cur
+            return [_num(self.ent.target_soc, min(100.0, float(soc_max)))]
+        if mode != "charge" and self.target_soc_saved is not None:
+            back, self.target_soc_saved = self.target_soc_saved, None
+            return [_num(self.ent.target_soc, back)] if abs(cur - back) > 0.5 else []
+        return []
+
     def calls_for(self, mode: str, grid_w: int | None, slot: str, get_state: GetState,
-                  now: float | None = None) -> list[Call]:
-        """Volání služeb pro režim. slot = začátek čtvrthodiny (kvůli novému triggeru každý slot)."""
+                  now: float | None = None, soc_max: float | None = None) -> list[Call]:
+        """Volání služeb pro režim. slot = začátek čtvrthodiny (kvůli novému triggeru každý slot).
+        soc_max = strop nabíjení z povelu (kvůli cílovému SOC dálkového řízení)."""
         now = now if now is not None else time.monotonic()
         e = self.ent
-        out: list[Call] = []
+        out: list[Call] = self._target_soc_calls(mode, soc_max, get_state)
+        if out:
+            self.last_target = None         # nový cílový SOC platí až po triggeru → Mode 1 odeslat znovu
 
         main_state, _ = get_state(e.select_main)
         if main_state in ("unknown", None):
@@ -222,3 +245,14 @@ def safe_mode(cmd: dict | None, soc: float | None, now_iso: str, offline_s: floa
         if mode == "sell" and chosen.get("soc_min") is not None and soc <= float(chosen["soc_min"]) + 1:
             return "self_use", None, chosen["slot"], "baterie na minimu, prodej končí"
     return mode, chosen.get("grid_w"), chosen["slot"], chosen.get("reason", "")
+
+
+def chosen_soc_max(cmd: dict | None, slot: str) -> float | None:
+    """Strop nabíjení (soc_max) z povelu pro danou čtvrthodinu (teď nebo „next“)."""
+    for c in (cmd or {}, (cmd or {}).get("next") or {}):
+        if c and c.get("slot") == slot and c.get("soc_max") is not None:
+            try:
+                return float(c["soc_max"])
+            except (TypeError, ValueError):
+                return None
+    return None
