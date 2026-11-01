@@ -127,7 +127,7 @@
       "fields": {
         "tariff": {
           "name": "Tarif",
-          "description": "Tarif jako objekt, nebo {\"template\": \"cez_d57d_fix\"} s úpravami."
+          "description": "Tarif jako objekt, nebo šablona (klíč template, např. cez_d57d_fix) s úpravami."
         },
         "entry_id": {
           "name": "Dům",
