@@ -72,6 +72,8 @@ ADVICE_FLAGS = {
     "good_time_for_appliances": ("Vhodná chvíle pro spotřebiče", "mdi:washing-machine"),
     "boiler_grid_now": ("Bojler: ohřev ze sítě teď", "mdi:water-boiler"),
     "boiler_pv_ok": ("Bojler: ohřev z FVE povolen", "mdi:water-boiler-auto"),
+    "heat_now": ("Topení: topit teď", "mdi:radiator"),
+    "heat_preheat": ("Topení: předtápět", "mdi:home-thermometer"),
 }
 STATE_NAMES = {"pending": "čeká na schválení", "shadow": "zkušební provoz", "control": "řízení", "disabled": "vypnuto"}
 

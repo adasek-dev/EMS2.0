@@ -92,5 +92,8 @@ class EmsApi:
     async def load_history(self, body: dict) -> dict:
         return await self._req("POST", self._site("/load_history"), json=body)
 
+    async def heat_history(self, body: dict) -> dict:
+        return await self._req("POST", self._site("/heat_history"), json=body)
+
     async def event(self, kind: str, data: dict) -> dict:
         return await self._req("POST", self._site("/events"), json={"kind": kind, "data": data})

@@ -96,6 +96,35 @@ def history_points(rows: list[dict], unit: str | None) -> list[dict]:
     return out
 
 
+def heat_history_points(ents: dict, stats: dict, units: dict) -> list[dict]:
+    """Hodinové statistiky HA pro topení → [{ts, heat_kwh, t_in, t_out}] (chybějící hodnota = None).
+
+    ents = {"heat": entita příkonu, "t_in": …, "t_out": …}; stats = výstup statistics_during_period."""
+    from datetime import datetime, timezone
+
+    rows: dict[str, dict] = {}
+    for key, ent in ents.items():
+        for r in stats.get(ent) or []:
+            mean, st = r.get("mean"), r.get("start")
+            if mean is None or st is None:
+                continue
+            if isinstance(st, (int, float)):
+                ts = datetime.fromtimestamp(st, tz=timezone.utc)
+            else:
+                ts = (st if st.tzinfo else st.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
+            try:
+                v = float(mean)
+            except (TypeError, ValueError):
+                continue
+            k = ts.strftime("%Y-%m-%dT%H:00:00Z")
+            p = rows.setdefault(k, {"ts": k})
+            if key == "heat":
+                p["heat_kwh"] = round(max(0.0, v * _POWER.get(units.get(ent) or "W", 1.0) / 1000.0), 4)
+            else:
+                p[key] = round(v, 2)
+    return [rows[k] for k in sorted(rows)]
+
+
 def sensor_values(get_state: GetState, sensors: dict | None) -> dict:
     """Prémiové senzory ze serveru {klíč: {entity, kind}} → {klíč: hodnota} (výkon ve W, teplota v °C)."""
     out = {}

@@ -81,3 +81,65 @@ def value_calls(get_state: GetState, items: list | None, last: dict, now: float)
         last[ent] = (val, now)
         out.append((domain, "set_value", {"entity_id": ent, "value": val}))
     return out
+
+
+HEAT_STALE_S = 1200          # 20 min bez povelu ze serveru → topení zpět na běžnou teplotu / odblokovat
+
+
+def _num(v) -> float | None:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def heat_calls(get_state: GetState, cmd: dict | None, last: dict, now: float, offline_s: float) -> list[tuple[str, str, dict]]:
+    """Plán topení → termostat (cílová teplota do climate / number / input_number) nebo blokovací spínač.
+
+    Bezpečnost: bez spojení déle než 20 min se termostat vrátí na běžnou teplotu a blokování se zruší;
+    blokovat se nikdy nesmí, když je doma pod „nejméně“."""
+    hc = ((cmd or {}).get("heating") or {}).get("ctl") or {}
+    ent = hc.get("entity") or ""
+    if not ent or hc.get("switch") not in ("thermostat", "block"):
+        return []
+    domain = ent.split(".", 1)[0]
+    out = (cmd or {}).get("heat_ctl")
+    stale = offline_s > HEAT_STALE_S or not out
+    st, attrs = get_state(ent)
+    if st is None or str(st).lower() in ("unavailable", "unknown"):
+        return []
+    calls: list[tuple[str, str, dict]] = []
+    if hc["switch"] == "thermostat":
+        target = _num(hc.get("t_norm")) if stale else _num(out.get("target_c"))
+        if target is None:
+            return []
+        if domain == "climate":
+            cur = _num((attrs or {}).get("temperature"))
+            call = ("climate", "set_temperature", {"entity_id": ent, "temperature": target})
+        elif domain in ("number", "input_number"):
+            cur = _num(st)
+            call = (domain, "set_value", {"entity_id": ent, "value": target})
+        else:
+            return []
+        if cur is not None and abs(cur - target) < 0.05:
+            return []
+        key = ("heat", ent)
+    else:
+        block = not stale and not out.get("heat_now")
+        t_in_ent = (((cmd or {}).get("sensors") or {}).get("t_in") or {}).get("entity")
+        t_in = _num(get_state(t_in_ent)[0]) if t_in_ent else None
+        t_min = _num(hc.get("t_min"))
+        if block and t_in is not None and t_min is not None and t_in < t_min - 0.1:
+            block = False                      # doma je zima → blokování vždy pustit
+        cur = is_on(get_state, ent)
+        if cur is block or domain not in ("switch", "input_boolean"):
+            return []
+        target = block
+        call = (domain, "turn_on" if block else "turn_off", {"entity_id": ent})
+        key = ("heat", ent)
+    prev = last.get(key)
+    if prev and prev[0] == target and now - prev[1] < RETRY_S:
+        return []
+    last[key] = (target, now)
+    calls.append(call)
+    return calls

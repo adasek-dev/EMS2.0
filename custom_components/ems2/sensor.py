@@ -31,6 +31,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         AdviceEnergy(c, "spotreba_zitra", "Spotřeba zítra", ("tomorrow", "load_kwh"), "mdi:home-lightning-bolt"),
         BoilerOut(c, "bojler_cil", "Bojler: cílová teplota", "target_c", "°C", SensorDeviceClass.TEMPERATURE),
         BoilerOut(c, "bojler_vykon", "Bojler: plánovaný výkon", "power_w", "W", SensorDeviceClass.POWER),
+        BoilerOut(c, "topeni_cil", "Topení: cílová teplota", "target_c", "°C", SensorDeviceClass.TEMPERATURE,
+                  "heating", "mdi:home-thermometer"),
+        BoilerOut(c, "topeni_vykon", "Topení: plánovaný výkon", "power_w", "W", SensorDeviceClass.POWER,
+                  "heating", "mdi:radiator"),
     ])
 
 
@@ -331,20 +335,21 @@ class Billing(Ems2Entity, SensorEntity):
 class BoilerOut(_Advice):
     """Plán ohřevu bojleru pro vlastní řízení (EMS plánuje ohřev): cílová teplota a výkon teď."""
 
-    def __init__(self, c, key, name, field, unit, dclass):
-        super().__init__(c, key, name, "mdi:water-boiler")
+    def __init__(self, c, key, name, field, unit, dclass, section="boiler", icon="mdi:water-boiler"):
+        super().__init__(c, key, name, icon)
         self._field = field
+        self._sec = section
         self._attr_native_unit_of_measurement = unit
         self._attr_device_class = dclass
 
     @property
     def available(self) -> bool:
-        return super().available and bool((self.adv.get("now") or {}).get("boiler"))
+        return super().available and bool((self.adv.get("now") or {}).get(self._sec))
 
     @property
     def native_value(self):
-        return ((self.adv.get("now") or {}).get("boiler") or {}).get(self._field)
+        return ((self.adv.get("now") or {}).get(self._sec) or {}).get(self._field)
 
     @property
     def extra_state_attributes(self):
-        return (self.adv.get("now") or {}).get("boiler") or {}
+        return (self.adv.get("now") or {}).get(self._sec) or {}

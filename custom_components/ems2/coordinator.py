@@ -27,7 +27,7 @@ from .const import (ACCOUNTING_INTERVAL_S, BUFFER_MAX, CONF_BATTERY_INVERT, CONF
 from . import heating, switching
 from .heating import HeatingControl
 from .solax import SolaxAdapter, SolaxEntities, chosen_soc_max, safe_mode
-from .telemetry import build_sample, history_points, sensor_values
+from .telemetry import build_sample, heat_history_points, history_points, sensor_values
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,6 +67,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         self._last_info = -1e9
         self._last_acc = -1e9
         self._history_task: str | None = None       # requested_at úlohy, která už běží / proběhla
+        self._heat_task: str | None = None          # totéž pro historii topení
 
     # ── pomocné ──────────────────────────────────────────────────
     def _get_state(self, entity_id: str) -> tuple[str | None, dict]:
@@ -164,6 +165,10 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
                 self._history_task = task.get("requested_at")
                 self.hass.async_create_background_task(self._send_load_history(int(task.get("days") or 21)),
                                                        "ems2_load_history")
+            htask = (self.command.get("tasks") or {}).get("heat_history")
+            if htask and htask.get("requested_at") != self._heat_task:
+                self._heat_task = htask.get("requested_at")
+                self.hass.async_create_background_task(self._send_heat_history(htask), "ems2_heat_history")
             if time.monotonic() - self._last_acc >= ACCOUNTING_INTERVAL_S:
                 self.accounting = (await self.api.accounting_today()).get("total", {})
                 try:
@@ -189,7 +194,18 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
     async def _switch_devices(self) -> None:
         """Zařízení přes HA (Shelly…): zapnout / vypnout podle povelu serveru (i ve zkušebním provozu)."""
         offline = (time.monotonic() - self.last_ok) if self.last_ok else 1e9
-        if self.watch or not self.command or offline > OFFLINE_FALLBACK_S:
+        if self.watch:
+            return
+        # topení (plán EMS): termostat / blokování – i bez spojení (pak bezpečně zpět na běžnou teplotu)
+        if not self.advice_only:
+            for domain, service, data in switching.heat_calls(self._get_state, self.command, self._dev_last,
+                                                              time.monotonic(), offline):
+                try:
+                    await self.hass.services.async_call(domain, service, data, blocking=True)
+                    _LOGGER.info("EMS 2.0: topení %s %s", service, data)
+                except Exception as e:      # noqa: BLE001
+                    _LOGGER.warning("EMS 2.0: topení %s %s selhalo: %s", service, data.get("entity_id"), e)
+        if not self.command or offline > OFFLINE_FALLBACK_S:
             return                      # jen sledování / bez serveru: zařízení nechat, jak jsou
         for domain, service, data in switching.calls(self._get_state, self.command.get("devices"),
                                                      self._dev_last, time.monotonic()) + \
@@ -289,6 +305,36 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         except EmsApiError as e:
             _LOGGER.warning("EMS 2.0: historii spotřeby se nepodařilo odeslat: %s", e)
             self._history_task = None              # zkusit znovu s dalším povelem
+
+    async def _send_heat_history(self, task: dict) -> None:
+        """Historie topení z dlouhodobých statistik HA (hodinové průměry): příkon topení, teplota uvnitř a venku."""
+        ents = {k: task.get(k) for k in ("heat", "t_in", "t_out") if task.get(k)}
+        body: dict[str, Any]
+        try:
+            from homeassistant.components.recorder import get_instance
+            from homeassistant.components.recorder.statistics import statistics_during_period
+
+            end = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+            start = end - timedelta(days=max(1, min(int(task.get("days") or 400), 400)))
+            stats = await get_instance(self.hass).async_add_executor_job(
+                statistics_during_period, self.hass, start, end, set(ents.values()), "hour", None, {"mean"})
+            units = {}
+            for e in ents.values():
+                st = self.hass.states.get(e)
+                units[e] = st.attributes.get("unit_of_measurement") if st else None
+            body = {"points": heat_history_points(ents, stats, units),
+                    "warnings": [f"{e}: bez dlouhodobých statistik" for e in ents.values() if not stats.get(e)]}
+            if not body["points"]:
+                body = {"error": "entity topení nemají v HA dlouhodobé statistiky (chybí state_class: measurement)"}
+        except Exception as e:      # noqa: BLE001
+            _LOGGER.warning("EMS 2.0: historie topení: %s", e)
+            body = {"error": f"čtení statistik HA selhalo: {e}"[:250]}
+        try:
+            res = await self.api.heat_history(body)
+            _LOGGER.info("EMS 2.0: historie topení odeslána: %s", res.get("status"))
+        except EmsApiError as e:
+            _LOGGER.warning("EMS 2.0: historii topení se nepodařilo odeslat: %s", e)
+            self._heat_task = None
 
     def snapshot(self) -> dict[str, Any]:
         return {"command": self.command, "applied": self.applied, "info": self.info, "settings": self.settings,
