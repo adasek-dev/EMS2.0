@@ -178,14 +178,16 @@ class SolaxAdapter:
         if use_mode8:
             changed = self.mode8_submode != submode or (ha_mode8 not in (None, submode))
             watchdog = self.mode8_active and not changed and remaining <= WATCHDOG_S
+            # z Mode 1 do Mode 8: Mode 1 vypnout – jen když opravdu běží (po výpadku čtení nebo restartu HA
+            # rozhoduje skutečný stav selectu, ne prázdná paměť), a NEJDŘÍV, ať trigger Mode 8 zůstane poslední
+            m1_now = self.last_main if self.last_main is not None else main_state
+            if m1_now != "Disabled":
+                out += [_sel(e.select_main, "Disabled"), _sel(e.select_modbus, "Disabled"),
+                        _press(e.apply), _press(e.trigger)]
+            self.last_main, self.last_modbus = "Disabled", "Disabled"
             if not self.mode8_active or changed or watchdog:
                 out += [_sel(e.select_mode8, submode), _num(e.duration_mode8, MODE8_DURATION_S),
                         _num(e.autorepeat, MODE8_AUTOREPEAT_S), _press(e.trigger_mode8)]
-            if self.last_main != "Disabled":
-                # z Mode 1 do Mode 8: Mode 1 vypnout
-                out += [_sel(e.select_main, "Disabled"), _sel(e.select_modbus, "Disabled"),
-                        _press(e.apply), _press(e.trigger)]
-                self.last_main, self.last_modbus = "Disabled", "Disabled"
             self.mode8_active, self.mode8_submode = True, submode
         elif self.mode8_active:
             if mode1_active:
