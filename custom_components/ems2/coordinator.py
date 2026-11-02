@@ -22,7 +22,7 @@ from homeassistant.util import dt as dt_util
 
 from .api import EmsApi, EmsApiError, EmsAuthError
 from .const import (ACCOUNTING_INTERVAL_S, BUFFER_MAX, CONF_BATTERY_INVERT, CONF_CONTROL, CONF_ENTITIES, CONF_GRID_INVERT,
-                    CONF_PREFIX, CONTROL_NONE, DEFAULT_PREFIX, DOMAIN, INFO_INTERVAL_S, OFFLINE_FALLBACK_S,
+                    CONF_PREFIX, CONF_URL, CONTROL_NONE, CONTROL_WATCH, server_tag, DEFAULT_PREFIX, DOMAIN, INFO_INTERVAL_S, OFFLINE_FALLBACK_S,
                     TELEMETRY_DEFAULTS, UPDATE_INTERVAL_S)
 from . import heating, switching
 from .heating import HeatingControl
@@ -41,6 +41,8 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         opts = {**entry.data, **entry.options}
         prefix = opts.get(CONF_PREFIX) or DEFAULT_PREFIX
         self.advice_only = opts.get(CONF_CONTROL) == CONTROL_NONE     # jen data a doporučení, nic neřídit
+        self.watch = opts.get(CONF_CONTROL) == CONTROL_WATCH          # druhá instance (beta server): jen sledovat
+        self.tag = server_tag(opts.get(CONF_URL, "")) if self.watch else ""
         self.entities = {} if self.advice_only else {k: v.format(p=prefix) for k, v in TELEMETRY_DEFAULTS.items()}
         self.entities.update({k: v for k, v in (opts.get(CONF_ENTITIES) or {}).items() if v})
         self.grid_invert = bool(opts.get(CONF_GRID_INVERT, False))
@@ -187,8 +189,8 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
     async def _switch_devices(self) -> None:
         """Zařízení přes HA (Shelly…): zapnout / vypnout podle povelu serveru (i ve zkušebním provozu)."""
         offline = (time.monotonic() - self.last_ok) if self.last_ok else 1e9
-        if not self.command or offline > OFFLINE_FALLBACK_S:
-            return                      # bez serveru zařízení nechat, jak jsou
+        if self.watch or not self.command or offline > OFFLINE_FALLBACK_S:
+            return                      # jen sledování / bez serveru: zařízení nechat, jak jsou
         for domain, service, data in switching.calls(self._get_state, self.command.get("devices"),
                                                      self._dev_last, time.monotonic()) + \
                 switching.value_calls(self._get_state, self.command.get("set_values"), self._dev_last, time.monotonic()):
@@ -199,6 +201,9 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
                 _LOGGER.warning("EMS 2.0: %s %s selhalo: %s", service, data["entity_id"], e)
 
     async def _apply(self, now, soc: float | None) -> None:
+        if self.watch:
+            self.applied = {"mode": None, "reason": "jen sledování (druhý server) – nic neovládá", "controlling": False}
+            return
         if self.advice_only:
             self.applied = {"mode": None, "reason": "jen data a doporučení – integrace střídač neřídí",
                             "controlling": False}

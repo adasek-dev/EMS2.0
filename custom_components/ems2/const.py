@@ -16,6 +16,16 @@ CONF_CONTROL = "control"          # "solax" = integrace řídí SolaX, "none" = 
 CONF_BATTERY_INVERT = "battery_invert"
 CONTROL_SOLAX = "solax"
 CONTROL_NONE = "none"
+# druhá instance stejného domu na jiném serveru (beta): posílá stejná měření, ale NIC neovládá
+CONTROL_WATCH = "watch"
+
+
+def server_tag(url: str) -> str:
+    """Krátký název serveru pro entity druhé instance: https://beta.app.ems20.cz → „beta“."""
+    import re
+    from urllib.parse import urlparse
+    host = (urlparse(url).hostname or "").lower()
+    return re.sub(r"[^a-z0-9]+", "_", host.split(".")[0]).strip("_") or "server"
 # režim „jen data a doporučení“: entity, které se dají vybrat (soc povinné)
 GENERIC_KEYS = ["soc", "pv_w", "load_w", "grid_w", "battery_w", "grid_l1_w", "grid_l2_w", "grid_l3_w", "pv_today_kwh"]
 

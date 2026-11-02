@@ -14,14 +14,16 @@ class Ems2Entity(CoordinatorEntity[Ems2Coordinator]):
     def __init__(self, coordinator: Ems2Coordinator, key: str, name: str, icon: str | None = None) -> None:
         super().__init__(coordinator)
         site = coordinator.api.site_id
+        tag = getattr(coordinator, "tag", "")        # druhá instance (beta): vlastní entity ems2_beta_…
         self._key = key
-        self._attr_unique_id = f"{site}_{key}"
+        self._attr_unique_id = f"{site}_{tag}_{key}" if tag else f"{site}_{key}"
         self._attr_name = name
-        self.entity_id = f"{self._platform_domain}.ems2_{key}"
+        self.entity_id = f"{self._platform_domain}.ems2_{tag}_{key}" if tag else f"{self._platform_domain}.ems2_{key}"
         if icon:
             self._attr_icon = icon
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, site)}, name=f"EMS 2.0 ({site})", manufacturer="EMS 2.0",
+            identifiers={(DOMAIN, f"{site}@{tag}" if tag else site)},
+            name=f"EMS 2.0 {tag.upper()} ({site})" if tag else f"EMS 2.0 ({site})", manufacturer="EMS 2.0",
             model="klient Home Assistant", sw_version=VERSION, entry_type=DeviceEntryType.SERVICE,
             configuration_url=coordinator.api.url + "/web/")
 

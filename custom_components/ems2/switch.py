@@ -12,7 +12,7 @@ from .entity import Ems2Entity
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
     c = entry.runtime_data
-    ctl = [] if c.advice_only else [ControlSwitch(c)]
+    ctl = [] if (c.advice_only or c.watch) else [ControlSwitch(c)]
     add(ctl + [SettingSwitch(c, k, n, i) for k, (n, i) in BOOL_SETTINGS.items()])
 
 

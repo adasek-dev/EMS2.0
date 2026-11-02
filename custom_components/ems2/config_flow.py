@@ -13,7 +13,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import EmsApi, EmsApiError, EmsAuthError
 from .const import (CONF_BATTERY_INVERT, CONF_CONTROL, CONF_ENTITIES, CONF_GRID_INVERT, CONF_PREFIX, CONF_SITE_ID,
-                    CONF_TOKEN, CONF_URL, CONTROL_NONE, CONTROL_SOLAX, DEFAULT_PREFIX, DEFAULT_URL, DOMAIN,
+                    CONF_TOKEN, CONF_URL, CONTROL_NONE, CONTROL_WATCH, server_tag, CONTROL_SOLAX, DEFAULT_PREFIX, DEFAULT_URL, DOMAIN,
                     GENERIC_KEYS, TELEMETRY_DEFAULTS, TELEMETRY_KEYS)
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,6 +44,20 @@ class Ems2ConfigFlow(ConfigFlow, domain=DOMAIN):
             if err:
                 errors["base"] = err
             else:
+                same = [e for e in self._async_current_entries() if e.data.get(CONF_SITE_ID) == info["site_id"]]
+                if same and all(e.data.get(CONF_URL, "").rstrip("/") != user_input[CONF_URL].rstrip("/") for e in same):
+                    # stejný dům na jiném serveru (beta): jen sledovat – stejná měření jako hlavní instance, nic neovládat
+                    await self.async_set_unique_id(f"{info['site_id']}@{server_tag(user_input[CONF_URL])}")
+                    self._abort_if_unique_id_configured()
+                    main = {**same[0].data, **same[0].options}
+                    self._data.update(user_input)
+                    self._data.update({k: main[k] for k in (CONF_PREFIX, CONF_ENTITIES, CONF_GRID_INVERT, CONF_BATTERY_INVERT)
+                                       if k in main})
+                    self._data[CONF_CONTROL] = CONTROL_WATCH
+                    self._whoami = info
+                    return self.async_create_entry(
+                        title=f"EMS 2.0 {server_tag(user_input[CONF_URL]).upper()} – {info.get('name', info['site_id'])} (jen sledování)",
+                        data=self._data)
                 await self.async_set_unique_id(info["site_id"])
                 self._abort_if_unique_id_configured()
                 self._data.update(user_input)
