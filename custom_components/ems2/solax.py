@@ -12,7 +12,8 @@ Převzato z Node-RED „6 · EXECUTOR“ v3.35 (jen část provedení, ekonomika
     pv_export  Mode 8 „Enabled Feedin Priority“
     no_export  Mode 8 „Negative Injection Price“
 Pojistky: autorepeat 900 s a watchdog (≤ 60 s zbývá → znovu Trigger), přechod Mode 8 → Mode 1
-bez zrušení prodeje (v3.19), ochrana „unknown“ selectu, reset zaseknutí v (R) módu po 2 min.
+bez zrušení prodeje (v3.19), výpadek čtení („unknown“ select) přečká bez vypnutí řízení a pak povel
+pošle celý znovu, reset zaseknutí v (R) módu po 2 min.
 """
 from __future__ import annotations
 
@@ -133,12 +134,11 @@ class SolaxAdapter:
             self.last_target = None         # nový cílový SOC platí až po triggeru → Mode 1 odeslat znovu
 
         main_state, _ = get_state(e.select_main)
-        if main_state in ("unknown", None):
+        if main_state in ("unknown", "unavailable", None):
+            # krátký výpadek čtení Modbusu (timeout): nic neposílat a nic nevypínat – střídač drží poslední
+            # povel (remotecontrol_duration 60 s); po obnovení čtení se povel pošle celý znovu
             self.reset()
-            self.mode8_active = False
-            self.applied_mode = "self_use"
-            return self._present([_sel(e.select_main, "Disabled"), _sel(e.select_modbus, "Disabled"),
-                                  _num(e.autorepeat, 0), _press(e.apply), _press(e.trigger)], get_state)
+            return []
 
         use_mode8 = mode in MODE8_SUBMODE
         submode = MODE8_SUBMODE.get(mode, "Disabled")
