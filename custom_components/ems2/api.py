@@ -80,6 +80,9 @@ class EmsApi:
     async def put_tariff(self, tariff: dict) -> dict:
         return await self._req("PUT", self._site("/tariff"), json={"tariff": tariff})
 
+    async def jobs(self, body: dict) -> dict:
+        return await self._req("POST", self._site("/jobs"), json=body)
+
     async def replan(self) -> dict:
         return await self._req("POST", self._site("/replan"))
 

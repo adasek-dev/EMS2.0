@@ -144,6 +144,54 @@
           "description": "Jen pro tento dům."
         }
       }
+    },
+    "plan_appliance": {
+      "name": "Plan appliance",
+      "description": "Planned appliance (washer, dishwasher, wallbox…): EMS picks the cheapest time in the window together with the battery.",
+      "fields": {
+        "appliance": {
+          "name": "Appliance",
+          "description": "Name or id of the appliance from EMS settings."
+        },
+        "count": {
+          "name": "Count",
+          "description": "Number of runs (never overlapping)."
+        },
+        "earliest": {
+          "name": "Earliest",
+          "description": "Empty = now."
+        },
+        "deadline": {
+          "name": "Done by",
+          "description": "Empty = end of day."
+        },
+        "then": {
+          "name": "Then run",
+          "description": "Another appliance after each run (e.g. dryer after washer)."
+        },
+        "kwh": {
+          "name": "Energy",
+          "description": "Wallbox / energy kind only: kWh to deliver."
+        },
+        "entry_id": {
+          "name": "Site",
+          "description": "Only this site."
+        }
+      }
+    },
+    "cancel_appliance": {
+      "name": "Cancel next appliance run",
+      "description": "Cancels the next planned run that has not started.",
+      "fields": {
+        "appliance": {
+          "name": "Appliance",
+          "description": "Name or id."
+        },
+        "entry_id": {
+          "name": "Site",
+          "description": "Only this site."
+        }
+      }
     }
   }
 }

@@ -17,3 +17,57 @@ replan:
       selector:
         config_entry:
           integration: ems2
+plan_appliance:
+  fields:
+    appliance:
+      required: true
+      example: "Pračka"
+      selector:
+        text:
+    count:
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 8
+          mode: box
+    earliest:
+      required: false
+      selector:
+        datetime:
+    deadline:
+      required: false
+      selector:
+        datetime:
+    then:
+      required: false
+      example: "Sušička"
+      selector:
+        text:
+    kwh:
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 200
+          step: 0.5
+          unit_of_measurement: kWh
+          mode: box
+    entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: ems2
+cancel_appliance:
+  fields:
+    appliance:
+      required: true
+      example: "Pračka"
+      selector:
+        text:
+    entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: ems2

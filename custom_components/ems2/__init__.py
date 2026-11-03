@@ -27,6 +27,18 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 SET_TARIFF_SCHEMA = vol.Schema({vol.Required("tariff"): dict, vol.Optional("entry_id"): cv.string})
 REPLAN_SCHEMA = vol.Schema({vol.Optional("entry_id"): cv.string})
+PLAN_APPLIANCE_SCHEMA = vol.Schema({
+    vol.Required("appliance"): cv.string, vol.Optional("count", default=1): vol.All(vol.Coerce(int), vol.Range(1, 8)),
+    vol.Optional("earliest"): cv.datetime, vol.Optional("deadline"): cv.datetime, vol.Optional("then"): cv.string,
+    vol.Optional("kwh"): vol.Coerce(float), vol.Optional("entry_id"): cv.string})
+CANCEL_APPLIANCE_SCHEMA = vol.Schema({vol.Required("appliance"): cv.string, vol.Optional("entry_id"): cv.string})
+
+
+def _iso(v):
+    from homeassistant.util import dt as dt_util
+    if v is None:
+        return None
+    return (v if v.tzinfo else v.replace(tzinfo=dt_util.get_default_time_zone())).isoformat()
 
 
 def _coordinators(hass: HomeAssistant, entry_id: str | None) -> list[Ems2Coordinator]:
@@ -56,6 +68,29 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             except EmsApiError as e:
                 raise HomeAssistantError(f"EMS 2.0: {e.message}") from e
 
+    async def plan_appliance(call: ServiceCall) -> None:
+        body = {"action": "add", "appliance": call.data["appliance"], "count": call.data.get("count", 1),
+                "earliest": _iso(call.data.get("earliest")), "deadline": _iso(call.data.get("deadline")),
+                "then": call.data.get("then"), "kwh": call.data.get("kwh")}
+        for coord in _coordinators(hass, call.data.get("entry_id")):
+            if coord.watch:
+                continue
+            try:
+                await coord.api.jobs({k: v for k, v in body.items() if v is not None})
+            except EmsApiError as e:
+                raise HomeAssistantError(f"EMS 2.0: {e.message}: {'; '.join(e.problems)}") from e
+
+    async def cancel_appliance(call: ServiceCall) -> None:
+        for coord in _coordinators(hass, call.data.get("entry_id")):
+            if coord.watch:
+                continue
+            try:
+                await coord.api.jobs({"action": "cancel_next", "appliance": call.data["appliance"]})
+            except EmsApiError as e:
+                raise HomeAssistantError(f"EMS 2.0: {e.message}") from e
+
+    hass.services.async_register(DOMAIN, "plan_appliance", plan_appliance, schema=PLAN_APPLIANCE_SCHEMA)
+    hass.services.async_register(DOMAIN, "cancel_appliance", cancel_appliance, schema=CANCEL_APPLIANCE_SCHEMA)
     hass.services.async_register(DOMAIN, "set_tariff", set_tariff, schema=SET_TARIFF_SCHEMA)
     hass.services.async_register(DOMAIN, "replan", replan, schema=REPLAN_SCHEMA)
     return True

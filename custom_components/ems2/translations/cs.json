@@ -144,6 +144,54 @@
           "description": "Jen pro tento dům."
         }
       }
+    },
+    "plan_appliance": {
+      "name": "Naplánovat spotřebič",
+      "description": "Spotřebič s plánem (pračka, myčka, wallbox…): EMS najde nejlevnější čas v zadaném okně spolu s baterií.",
+      "fields": {
+        "appliance": {
+          "name": "Spotřebič",
+          "description": "Název nebo id spotřebiče z Nastavení EMS (např. Pračka)."
+        },
+        "count": {
+          "name": "Kolikrát",
+          "description": "Počet běhů (nepřekrývají se)."
+        },
+        "earliest": {
+          "name": "Nejdřív od",
+          "description": "Prázdné = hned."
+        },
+        "deadline": {
+          "name": "Hotovo do",
+          "description": "Prázdné = do konce dne."
+        },
+        "then": {
+          "name": "Po něm spustit",
+          "description": "Jiný spotřebič po každém běhu (např. sušička po pračce)."
+        },
+        "kwh": {
+          "name": "Energie",
+          "description": "Jen u wallboxu / energie do času: kolik kWh."
+        },
+        "entry_id": {
+          "name": "Dům",
+          "description": "Jen pro tento dům."
+        }
+      }
+    },
+    "cancel_appliance": {
+      "name": "Zrušit další běh spotřebiče",
+      "description": "Zruší nejbližší naplánovaný běh, který ještě nezačal.",
+      "fields": {
+        "appliance": {
+          "name": "Spotřebič",
+          "description": "Název nebo id spotřebiče."
+        },
+        "entry_id": {
+          "name": "Dům",
+          "description": "Jen pro tento dům."
+        }
+      }
     }
   }
 }
