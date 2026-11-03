@@ -13,7 +13,7 @@ from .entity import Ems2Entity, track_jobs
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
     c = entry.runtime_data
     add([Connected(c), HdoLow(c)] + [AdviceFlag(c, k, n, i) for k, (n, i) in ADVICE_FLAGS.items()])
-    track_jobs(c, entry, add, lambda j: JobRunNow(c, j))
+    track_jobs(c, entry, add, lambda j, n: JobRunNow(c, j, n))
 
 
 class Connected(Ems2Entity, BinarySensorEntity):
@@ -73,18 +73,14 @@ class JobRunNow(Ems2Entity, BinarySensorEntity):
     """Spotřebič s plánem: zapnuto = podle plánu EMS ho pustit teď (pro vlastní automatizace)."""
     _platform_domain = "binary_sensor"
 
-    def __init__(self, c, job_id):
-        super().__init__(c, f"spotrebic_{job_id}_pustit", f"Spotřebič {job_id}: pustit teď", "mdi:play-circle")
+    def __init__(self, c, job_id, name):
+        super().__init__(c, f"spotrebic_{job_id}_pustit", "Pustit teď", "mdi:play-circle", group=(job_id, name))
         self._job = job_id
 
     @property
     def job(self) -> dict:
         jobs = (((self.d.get("advice") or {}).get("now") or {}).get("jobs")) or []
         return next((j for j in jobs if j.get("id") == self._job), {})
-
-    @property
-    def name(self):
-        return f"{self.job.get('name') or self._job}: pustit teď"
 
     @property
     def available(self) -> bool:

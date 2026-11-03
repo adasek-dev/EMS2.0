@@ -27,7 +27,7 @@ from .const import (ACCOUNTING_INTERVAL_S, BUFFER_MAX, CONF_BATTERY_INVERT, CONF
 from . import heating, switching
 from .heating import HeatingControl
 from .solax import SolaxAdapter, SolaxEntities, chosen_soc_max, safe_mode
-from .telemetry import build_sample, heat_history_points, history_points, sensor_values
+from .telemetry import appl_series, build_sample, heat_history_points, history_points, sensor_values
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,6 +68,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         self._last_acc = -1e9
         self._history_task: str | None = None       # requested_at úlohy, která už běží / proběhla
         self._heat_task: str | None = None          # totéž pro historii topení
+        self._appl_task: str | None = None          # totéž pro historii příkonu spotřebičů
 
     # ── pomocné ──────────────────────────────────────────────────
     def _get_state(self, entity_id: str) -> tuple[str | None, dict]:
@@ -169,6 +170,10 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
             if htask and htask.get("requested_at") != self._heat_task:
                 self._heat_task = htask.get("requested_at")
                 self.hass.async_create_background_task(self._send_heat_history(htask), "ems2_heat_history")
+            atask = (self.command.get("tasks") or {}).get("appl_history")
+            if atask and atask.get("requested_at") != self._appl_task:
+                self._appl_task = atask.get("requested_at")
+                self.hass.async_create_background_task(self._send_appl_history(atask), "ems2_appl_history")
             if time.monotonic() - self._last_acc >= ACCOUNTING_INTERVAL_S:
                 self.accounting = (await self.api.accounting_today()).get("total", {})
                 try:
@@ -335,6 +340,36 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         except EmsApiError as e:
             _LOGGER.warning("EMS 2.0: historii topení se nepodařilo odeslat: %s", e)
             self._heat_task = None
+
+    async def _send_appl_history(self, task: dict) -> None:
+        """Historie příkonu spotřebičů s plánem z krátkodobých statistik HA (5min průměry, ~10 dní)."""
+        ents = {k: v for k, v in (task.get("entities") or {}).items() if v}
+        body: dict[str, Any]
+        try:
+            from homeassistant.components.recorder import get_instance
+            from homeassistant.components.recorder.statistics import statistics_during_period
+
+            end = dt_util.utcnow()
+            start = end - timedelta(days=max(1, min(int(task.get("days") or 10), 14)))
+            stats = await get_instance(self.hass).async_add_executor_job(
+                statistics_during_period, self.hass, start, end, set(ents.values()), "5minute", None, {"mean"})
+            units = {}
+            for e in ents.values():
+                st = self.hass.states.get(e)
+                units[e] = st.attributes.get("unit_of_measurement") if st else None
+            body = {"series": appl_series(ents, stats, units),
+                    "warnings": [f"{e}: bez statistik" for e in ents.values() if not stats.get(e)]}
+            if not any(body["series"].values()):
+                body = {"error": "senzory příkonu nemají v HA statistiky (chybí state_class: measurement)"}
+        except Exception as e:      # noqa: BLE001
+            _LOGGER.warning("EMS 2.0: historie spotřebičů: %s", e)
+            body = {"error": f"čtení statistik HA selhalo: {e}"[:250]}
+        try:
+            res = await self.api.appl_history(body)
+            _LOGGER.info("EMS 2.0: historie spotřebičů odeslána: %s", res.get("status"))
+        except EmsApiError as e:
+            _LOGGER.warning("EMS 2.0: historii spotřebičů se nepodařilo odeslat: %s", e)
+            self._appl_task = None
 
     def snapshot(self) -> dict[str, Any]:
         return {"command": self.command, "applied": self.applied, "info": self.info, "settings": self.settings,

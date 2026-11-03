@@ -36,7 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         BoilerOut(c, "topeni_vykon", "Topení: plánovaný výkon", "power_w", "W", SensorDeviceClass.POWER,
                   "heating", "mdi:radiator"),
     ])
-    track_jobs(c, entry, add, lambda j: JobPower(c, j))
+    track_jobs(c, entry, add, lambda j, n: [JobPower(c, j, n), JobNext(c, j, n), JobToday(c, j, n)])
 
 
 class SiteState(Ems2Entity, SensorEntity):
@@ -361,17 +361,13 @@ class JobPower(_Advice):
     _attr_device_class = SensorDeviceClass.POWER
     _attr_native_unit_of_measurement = "W"
 
-    def __init__(self, c, job_id):
-        super().__init__(c, f"spotrebic_{job_id}_vykon", f"Spotřebič {job_id}: plánovaný výkon", "mdi:washing-machine")
+    def __init__(self, c, job_id, name):
+        super().__init__(c, f"spotrebic_{job_id}_vykon", "Plánovaný výkon", "mdi:flash", group=(job_id, name))
         self._job = job_id
 
     @property
     def job(self) -> dict:
         return next((j for j in ((self.adv.get("now") or {}).get("jobs") or []) if j.get("id") == self._job), {})
-
-    @property
-    def name(self):
-        return f"{self.job.get('name') or self._job}: plánovaný výkon"
 
     @property
     def available(self) -> bool:
@@ -384,3 +380,41 @@ class JobPower(_Advice):
     @property
     def extra_state_attributes(self):
         return {k: v for k, v in self.job.items() if k not in ("power_w",)}
+
+
+class JobNext(JobPower):
+    """Spotřebič s plánem: začátek dalšího naplánovaného běhu."""
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_native_unit_of_measurement = None
+
+    def __init__(self, c, job_id, name):
+        _Advice.__init__(self, c, f"spotrebic_{job_id}_dalsi", "Další běh", "mdi:clock-start", group=(job_id, name))
+        self._job = job_id
+
+    @property
+    def native_value(self):
+        v = self.job.get("next_start")
+        return dt_util.parse_datetime(v) if v else None
+
+    @property
+    def extra_state_attributes(self):
+        return {k: self.job.get(k) for k in ("next_end", "deadline", "waiting")}
+
+
+class JobToday(JobPower):
+    """Spotřebič s plánem: dnes hotovo / naplánováno („1 / 2“)."""
+    _attr_device_class = None
+    _attr_native_unit_of_measurement = None
+
+    def __init__(self, c, job_id, name):
+        _Advice.__init__(self, c, f"spotrebic_{job_id}_dnes", "Dnes hotovo", "mdi:check-circle-outline", group=(job_id, name))
+        self._job = job_id
+
+    @property
+    def native_value(self):
+        j = self.job
+        return f"{j.get('today_done', 0)} / {j.get('today', 0)}" if j else None
+
+    @property
+    def extra_state_attributes(self):
+        return {"done": self.job.get("today_done"), "planned": self.job.get("today")}

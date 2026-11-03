@@ -96,6 +96,30 @@ def history_points(rows: list[dict], unit: str | None) -> list[dict]:
     return out
 
 
+def appl_series(ents: dict, stats: dict, units: dict) -> dict:
+    """5min statistiky HA pro senzory příkonu spotřebičů → {id: [[ts, W], …]}."""
+    from datetime import datetime, timezone
+
+    out: dict[str, list] = {}
+    for aid, ent in ents.items():
+        rows = []
+        for r in stats.get(ent) or []:
+            mean, st = r.get("mean"), r.get("start")
+            if mean is None or st is None:
+                continue
+            if isinstance(st, (int, float)):
+                ts = datetime.fromtimestamp(st, tz=timezone.utc)
+            else:
+                ts = (st if st.tzinfo else st.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
+            try:
+                w = float(mean) * _POWER.get(units.get(ent) or "W", 1.0)
+            except (TypeError, ValueError):
+                continue
+            rows.append([ts.strftime("%Y-%m-%dT%H:%M:%SZ"), round(max(0.0, w), 1)])
+        out[aid] = rows
+    return out
+
+
 def heat_history_points(ents: dict, stats: dict, units: dict) -> list[dict]:
     """Hodinové statistiky HA pro topení → [{ts, heat_kwh, t_in, t_out}] (chybějící hodnota = None).
 
