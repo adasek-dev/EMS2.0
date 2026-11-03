@@ -32,3 +32,18 @@ class Ems2Entity(CoordinatorEntity[Ems2Coordinator]):
     @property
     def d(self) -> dict:
         return self.coordinator.data or {}
+
+
+def track_jobs(c, entry, add, make) -> None:
+    """Entity pro spotřebiče s plánem: vytvoří je pro známé spotřebiče a doplní nové, jak se objeví v doporučení."""
+    seen: set[str] = set()
+
+    def _sync() -> None:
+        jobs = ((((c.data or {}).get("advice") or {}).get("now") or {}).get("jobs")) or []
+        new = [j["id"] for j in jobs if j.get("id") and j["id"] not in seen]
+        if new:
+            seen.update(new)
+            add([make(j) for j in new])
+
+    _sync()
+    entry.async_on_unload(c.async_add_listener(_sync))

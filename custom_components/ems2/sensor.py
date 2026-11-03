@@ -8,7 +8,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .const import MODE_NAMES, PRICE_LEVELS, STATE_NAMES
-from .entity import Ems2Entity
+from .entity import Ems2Entity, track_jobs
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
@@ -36,6 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         BoilerOut(c, "topeni_vykon", "Topení: plánovaný výkon", "power_w", "W", SensorDeviceClass.POWER,
                   "heating", "mdi:radiator"),
     ])
+    track_jobs(c, entry, add, lambda j: JobPower(c, j))
 
 
 class SiteState(Ems2Entity, SensorEntity):
@@ -353,3 +354,33 @@ class BoilerOut(_Advice):
     @property
     def extra_state_attributes(self):
         return (self.adv.get("now") or {}).get(self._sec) or {}
+
+
+class JobPower(_Advice):
+    """Spotřebič s plánem (po vzoru EMHASS): plánovaný výkon teď ve W, rozpis po čtvrthodinách v atributu `schedule`."""
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_native_unit_of_measurement = "W"
+
+    def __init__(self, c, job_id):
+        super().__init__(c, f"spotrebic_{job_id}_vykon", f"Spotřebič {job_id}: plánovaný výkon", "mdi:washing-machine")
+        self._job = job_id
+
+    @property
+    def job(self) -> dict:
+        return next((j for j in ((self.adv.get("now") or {}).get("jobs") or []) if j.get("id") == self._job), {})
+
+    @property
+    def name(self):
+        return f"{self.job.get('name') or self._job}: plánovaný výkon"
+
+    @property
+    def available(self) -> bool:
+        return super().available and bool(self.job)
+
+    @property
+    def native_value(self):
+        return self.job.get("power_w")
+
+    @property
+    def extra_state_attributes(self):
+        return {k: v for k, v in self.job.items() if k not in ("power_w",)}
