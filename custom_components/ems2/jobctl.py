@@ -1,4 +1,7 @@
-"""Spotřebiče s plánem: ovládání z HA (nejdřív od, hotovo do, kolikrát, po něm spustit, naplánovat, zrušit další).
+"""Spotřebiče s plánem: ovládání z HA. HA řadí entity na stránce zařízení podle názvu – názvy jsou zvolené tak,
+aby pořadí dávalo smysl: Hotovo do, Kolikrát, Nejdřív od, Po něm spustit, Vložit do plánu, Zrušit další běh.
+
+Ovládání z HA (nejdřív od, hotovo do, kolikrát, po něm spustit, naplánovat, zrušit další).
 
 Formulář se drží v paměti integrace (coordinator.job_form) – po „Naplánovat“ se vrátí na výchozí hodnoty
 (teď, do konce dne, 1×, nic). Naplánování posílá stejné API jako akce ems2.plan_appliance.
@@ -27,7 +30,9 @@ def _end_of_day() -> datetime:
 
 def form(c, job_id: str) -> dict:
     f = c.job_form.setdefault(job_id, {})
-    f.setdefault("earliest", None)            # None = teď
+    # „nejdřív od“: čas, kdy se formulář vytvořil (ne pořád „teď“ – stav by se měnil každou minutu a plnil Aktivitu);
+    # minulý čas server bere jako „hned“
+    f.setdefault("earliest", dt_util.now().replace(second=0, microsecond=0))
     f.setdefault("deadline", None)            # None = do konce dne
     f.setdefault("count", 1)
     f.setdefault("then", None)
@@ -67,7 +72,7 @@ class JobEarliest(_JobCtl, DateTimeEntity):
 
     @property
     def native_value(self):
-        return self.f["earliest"] or dt_util.now().replace(second=0, microsecond=0)
+        return self.f["earliest"]
 
     async def async_set_value(self, value: datetime) -> None:
         self.f["earliest"] = value
@@ -133,13 +138,13 @@ class JobPlan(_JobCtl, ButtonEntity):
     _platform_domain = "button"
 
     def __init__(self, c, job_id, name):
-        super().__init__(c, job_id, name, "naplanovat", "Naplánovat", "mdi:calendar-check")
+        super().__init__(c, job_id, name, "naplanovat", "Vložit do plánu", "mdi:calendar-check")
 
     async def async_press(self) -> None:
         f = self.f
         dl = f["deadline"] or _end_of_day()
         body = {"action": "add", "appliance": self._job, "count": f["count"], "deadline": dl.isoformat()}
-        if f["earliest"]:
+        if f["earliest"] and f["earliest"] > dt_util.now():
             body["earliest"] = f["earliest"].isoformat()
         if f["then"]:
             body["then"] = f["then"]
