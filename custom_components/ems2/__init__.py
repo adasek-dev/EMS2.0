@@ -120,11 +120,38 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     api = EmsApi(async_get_clientsession(hass), entry.data[CONF_URL], entry.data[CONF_SITE_ID], entry.data[CONF_TOKEN])
     coord = Ems2Coordinator(hass, entry, api)
+    coord.t58 = _t58_start(hass, entry)
     await coord.async_config_entry_first_refresh()
     entry.runtime_data = coord
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_reload))
     return True
+
+
+def _t58_start(hass: HomeAssistant, entry: ConfigEntry):
+    """Monitor článků baterie – jedno spojení na převodník pro celé HA (převodník pustí jen jednoho klienta)."""
+    from .const import CONF_T58_HOST, CONF_T58_PER_PACK, CONF_T58_PORT
+    from .t58 import T58Monitor
+    opts = {**entry.data, **entry.options}
+    host = (opts.get(CONF_T58_HOST) or "").strip()
+    if not host:
+        return None
+    port = int(opts.get(CONF_T58_PORT) or 4196)
+    mons = hass.data.setdefault(DOMAIN, {}).setdefault("t58", {})
+    key = f"{host}:{port}"
+    mon = mons.get(key)
+    if mon is None:
+        mon = mons[key] = T58Monitor(host, port, int(opts.get(CONF_T58_PER_PACK) or 2))
+        mon.start(hass)
+    mon.users += 1
+
+    async def _release() -> None:
+        mon.users -= 1
+        if mon.users <= 0:
+            mons.pop(key, None)
+            await mon.stop()
+    entry.async_on_unload(_release)
+    return mon
 
 
 async def _reload(hass: HomeAssistant, entry: ConfigEntry) -> None:

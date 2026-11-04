@@ -7,7 +7,7 @@
  * Volitelná nastavení karty: prefix (např. ems2_beta_ – jen spotřebiče z bety), appliances: [pracka, mycka], title.
  */
 (() => {
-  const VER = "2.0.34";
+  const VER = "2.0.35";
   const ICONS = { pracka: "🫧", susicka: "🌀", mycka: "🍽️", auto: "🚗", wall: "🚗", bazen: "🏊" };
   const pad = (n) => String(n).padStart(2, "0");
   const fmtTime = (iso) => { if (!iso) return ""; const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
@@ -216,6 +216,109 @@
   if (!window.customCards.find((c) => c.type === "ems2-appliances-card")) {
     window.customCards.push({ type: "ems2-appliances-card", name: "EMS 2.0 – spotřebiče",
       description: "Plánování pračky, myčky, sušičky… z EMS 2.0 – karta se sama naplní všemi spotřebiči.", preview: true });
+  }
+
+  /* ── karta „EMS 2.0 – články baterie“ (monitor Solax T58 v integraci) ─────────────────────────── */
+  const num = (v, d) => (v == null ? "–" : Number(v).toLocaleString("cs-CZ", { minimumFractionDigits: d, maximumFractionDigits: d }));
+  class Ems2BatteryCard extends HTMLElement {
+    setConfig(config) { this._config = config || {}; this._render(); }
+    static getStubConfig() { return {}; }
+    getCardSize() { return 8; }
+    set hass(hass) {
+      this._hass = hass;
+      const st = this._state();
+      const sig = st ? st.last_updated + st.state : "none";
+      if (sig !== this._sig) { this._sig = sig; this._render(); }
+    }
+    _state() {
+      const h = this._hass; if (!h) return null;
+      const id = this._config.entity || (h.states["sensor.ems2_baterie_clanky"] ? "sensor.ems2_baterie_clanky"
+        : Object.keys(h.states).find((k) => /^sensor\.ems2_[a-z0-9]+_baterie_clanky$/.test(k)));
+      return id ? h.states[id] : null;
+    }
+    _render() {
+      if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+      const st = this._state();
+      const title = esc(this._config.title || "Baterie – články");
+      if (!st) {
+        this.shadowRoot.innerHTML = `${BCSS}<ha-card><div class="hd"><b>${title}</b></div><p class="mut">Monitor článků není nastavený: Nastavení → Zařízení a služby → EMS 2.0 → Konfigurovat → Monitor článků baterie.</p></ha-card>`;
+        return;
+      }
+      const a = st.attributes || {}, mods = a.modules || [];
+      if (!mods.length) {
+        this.shadowRoot.innerHTML = `${BCSS}<ha-card><div class="hd"><b>${title}</b><span class="pill warn">bez dat</span></div><p class="mut">${esc(a.error || "Čekám na data ze sběrnice baterií…")} (${esc(a.source || "")})</p></ha-card>`;
+        return;
+      }
+      let gx = -1, gn = 99, worst = null, low = null, hot = null, nbal = 0, nc = 0;
+      for (const m of mods) {
+        nc = Math.max(nc, m.cells.length);
+        nbal += (m.balancing || []).length;
+        m.cells.forEach((c, i) => { if (c == null) return; if (c > gx) gx = c; if (c < gn) { gn = c; low = { m, i }; } });
+        if (!worst || (m.delta_mv || 0) > (worst.delta_mv || 0)) worst = m;
+        if (m.temp_max != null && (!hot || m.temp_max > hot.temp_max)) hot = m;
+      }
+      const lim = this._config.warn_mv || 40;
+      const lvl = worst.delta_mv >= lim * 1.5 ? ["bad", "problém"] : worst.delta_mv >= lim ? ["warn", "pozor"] : ["ok", "v pořádku"];
+      const packs = new Set(mods.map((m) => m.pack)).size, per = Math.max(...mods.map((m) => m.mod));
+      let rows = "";
+      for (const m of mods) {
+        const vals = m.cells.filter((c) => c != null), mx = Math.max(...vals), mn = Math.min(...vals), bal = new Set(m.balancing || []);
+        let tds = "";
+        for (let i = 0; i < nc; i++) {
+          const c = m.cells[i];
+          let cls = c == null ? "" : c === gx ? "gx" : c === gn ? "gn" : mx !== mn && c === mx ? "x" : mx !== mn && c === mn ? "n" : "";
+          if (bal.has(i + 1)) cls += " b";
+          tds += `<td class="${cls}">${c == null ? "–" : num(c, 3)}</td>`;
+        }
+        const t = m.temp_min != null ? `${num(m.temp_min, 0)}–${num(m.temp_max, 0)}` : "–";
+        rows += `<tr><th>${m.pack}·M${m.mod}</th>${tds}<td class="s${m.delta_mv >= lim ? " w" : ""}">${num(m.delta_mv, 0)}</td><td class="s">${t}</td><td class="s">${num(m.soc, 0)} %</td></tr>`;
+      }
+      const ago = Math.max(0, Math.round((Date.now() - new Date(st.last_updated)) / 1000));
+      this.shadowRoot.innerHTML = `${BCSS}<ha-card>
+        <div class="hd"><span class="ic">🔋</span><b>${title}</b><span class="pill ${lvl[0]}">${lvl[1]}</span></div>
+        <div class="sub">Solax T58 · ${packs} ${packs === 1 ? "pack" : packs < 5 ? "packy" : "packů"} × ${per} ${per === 1 ? "modul" : per < 5 ? "moduly" : "modulů"} · ${nc} článků · před ${ago < 90 ? ago + " s" : Math.round(ago / 60) + " min"}</div>
+        <div class="stats">
+          <div><b>${num(worst.delta_mv, 0)} <small>mV</small></b><span>největší rozdíl<br>pack ${worst.pack} · M${worst.mod}</span></div>
+          <div><b>${num(gn, 3)} <small>V</small></b><span>nejnižší článek<br>${low.m.pack} · M${low.m.mod} · č. ${low.i + 1}</span></div>
+          <div><b>${hot ? num(Math.min(...mods.map((m) => m.temp_min ?? 99)), 0) + "–" + num(hot.temp_max, 0) : "–"} <small>°C</small></b><span>teploty<br>${hot ? `nejteplejší ${hot.pack} · M${hot.mod}` : ""}</span></div>
+          <div><b>${nbal}</b><span>${nbal === 1 ? "článek" : nbal > 1 && nbal < 5 ? "články" : "článků"}<br>${nbal > 1 && nbal < 5 ? "balancují" : "balancuje"}</span></div>
+        </div>
+        <div class="wrap"><table><thead><tr><th></th>${Array.from({ length: nc }, (_, i) => `<th>${i + 1}</th>`).join("")}<th>Δ mV</th><th>°C</th><th>SOC</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <div class="leg"><span><i class="x"></i>nejvyšší v modulu</span><span><i class="n"></i>nejnižší v modulu</span><span><i class="gx"></i>nejvyšší celkem</span><span><i class="gn"></i>nejnižší celkem</span><span><i class="b"></i>balancuje</span></div>
+      </ha-card>`;
+    }
+  }
+  const BCSS = `<style>
+    ha-card { padding: 16px; }
+    .hd { display: flex; align-items: center; gap: 10px; font-size: 18px; }
+    .ic { font-size: 20px; }
+    .sub, .mut { color: var(--secondary-text-color); font-size: 13px; margin: 4px 0 12px; }
+    .pill { margin-left: auto; font-size: 12px; border-radius: 99px; padding: 2px 10px; font-weight: 600; }
+    .pill.ok { background: rgba(46,204,113,.18); color: #2ecc71; } .pill.warn { background: rgba(243,156,18,.2); color: #f39c12; }
+    .pill.bad { background: rgba(231,76,60,.2); color: #e74c3c; }
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .stats div { background: var(--secondary-background-color, rgba(127,127,127,.12)); border-radius: 10px; padding: 10px 12px; }
+    .stats b { font-size: 20px; display: block; } .stats small { font-size: 12px; color: var(--secondary-text-color); }
+    .stats span { font-size: 12px; color: var(--secondary-text-color); }
+    .wrap { overflow-x: auto; }
+    table { border-collapse: separate; border-spacing: 2px; font-size: 12px; font-variant-numeric: tabular-nums; width: 100%; min-width: 760px; }
+    th { color: var(--secondary-text-color); font-weight: 500; font-size: 11px; padding: 3px; }
+    tbody th { color: var(--primary-text-color); white-space: nowrap; text-align: left; }
+    td { background: var(--secondary-background-color, rgba(127,127,127,.12)); border-radius: 5px; text-align: center; padding: 5px 1px; }
+    td.x { background: rgba(231,76,60,.22); color: #e74c3c; } td.n { background: rgba(52,120,246,.22); color: #5b8def; }
+    td.gx { background: #c0392b; color: #fff; font-weight: 700; } td.gn { background: #2f6fe8; color: #fff; font-weight: 700; }
+    td.b { box-shadow: inset 0 0 0 2px #2ecc71; } td.s { background: none; white-space: nowrap; font-weight: 600; padding: 5px 6px; }
+    td.s.w { color: #f39c12; }
+    .leg { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--secondary-text-color); font-size: 12px; margin-top: 10px; }
+    .leg i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+    .leg i.x { background: rgba(231,76,60,.22); } .leg i.n { background: rgba(52,120,246,.22); } .leg i.gx { background: #c0392b; }
+    .leg i.gn { background: #2f6fe8; } .leg i.b { box-shadow: inset 0 0 0 2px #2ecc71; }
+    @media (max-width: 600px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  </style>`;
+  if (!customElements.get("ems2-battery-card")) customElements.define("ems2-battery-card", Ems2BatteryCard);
+  if (!window.customCards.find((c) => c.type === "ems2-battery-card")) {
+    window.customCards.push({ type: "ems2-battery-card", name: "EMS 2.0 – články baterie",
+      description: "Napětí všech článků, rozdíly, teploty a balancování z monitoru baterie Solax T58.", preview: true });
   }
   console.info(`%c EMS 2.0 %c karty ${VER} `, "background:#10b981;color:#fff;border-radius:3px 0 0 3px;padding:1px 4px", "background:#334155;color:#fff;border-radius:0 3px 3px 0;padding:1px 4px");
 })();

@@ -37,6 +37,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
                   "heating", "mdi:radiator"),
     ])
     track_jobs(c, entry, add, lambda j, n: [JobPower(c, j, n), JobNext(c, j, n), JobToday(c, j, n), JobBest(c, j, n)])
+    from .t58_entities import track_t58
+    track_t58(c, entry, add)
 
 
 class SiteState(Ems2Entity, SensorEntity):

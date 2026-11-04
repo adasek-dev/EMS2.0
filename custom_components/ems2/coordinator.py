@@ -67,6 +67,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         self._last_info = -1e9
         self._last_acc = -1e9
         self._last_cells = -1e9
+        self.t58 = None                              # monitor článků baterie (t58.T58Monitor), když je nastavený
         self._history_task: str | None = None       # requested_at úlohy, která už běží / proběhla
         self._heat_task: str | None = None          # totéž pro historii topení
         self._appl_task: str | None = None
@@ -348,8 +349,17 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
 
     async def _send_cells(self) -> None:
         """Zdraví baterie: napětí všech článků, teploty a balancování z monitoru BMS (jednou za 15 min)."""
-        mods = cell_snapshot((s.entity_id, s.state) for s in self.hass.states.async_all("sensor")
-                             if s.entity_id.startswith("sensor.battery_"))
+        mons = list(((self.hass.data.get(DOMAIN) or {}).get("t58") or {}).values())
+        if self.t58 is not None:
+            mons = [self.t58]
+        mods = []
+        for mon in mons:                             # vlastní monitor integrace (i pro druhou instanci – beta)
+            mods = [{k: m[k] for k in ("pack", "mod", "cells", "temps", "bal")} for m in mon.modules()]
+            if mods:
+                break
+        if not mods:                                 # jinak senzory doplňku „Solax T58 Battery Monitor“ v HA
+            mods = cell_snapshot((s.entity_id, s.state) for s in self.hass.states.async_all("sensor")
+                                 if s.entity_id.startswith("sensor.battery_"))
         if not mods:
             _LOGGER.debug("EMS 2.0: senzory článků (sensor.battery_<pack>_m<modul>_cell_NN) nenalezeny")
             return

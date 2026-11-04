@@ -84,23 +84,6 @@
   },
   "options": {
     "step": {
-      "init": {
-        "title": "EMS 2.0 – entity měření",
-        "description": "Prázdné pole = výchozí entita SolaX Modbus podle prefixu.",
-        "data": {
-          "prefix": "Prefix entit SolaX",
-          "grid_invert": "Obrátit znaménko výkonu sítě",
-          "soc": "SOC baterie (%)",
-          "pv_w": "Výkon FVE",
-          "load_w": "Spotřeba domu",
-          "grid_l1_w": "Síť L1",
-          "grid_l2_w": "Síť L2",
-          "grid_l3_w": "Síť L3",
-          "battery_w": "Výkon baterie (+ nabíjení)",
-          "pv_today_kwh": "Výroba FVE dnes",
-          "inverter_state": "Stav střídače (run mode)"
-        }
-      },
       "generic": {
         "title": "EMS 2.0 – entity měření",
         "description": "Režim jen data a doporučení.",
@@ -117,7 +100,45 @@
           "grid_invert": "Obrátit znaménko sítě (když + znamená odběr)",
           "battery_invert": "Obrátit znaménko baterie (když + znamená vybíjení)"
         }
+      },
+      "entities": {
+        "title": "EMS 2.0 – entity měření",
+        "description": "Prázdné pole = výchozí entita SolaX Modbus podle prefixu.",
+        "data": {
+          "prefix": "Prefix entit SolaX",
+          "grid_invert": "Obrátit znaménko výkonu sítě",
+          "soc": "SOC baterie (%)",
+          "pv_w": "Výkon FVE",
+          "load_w": "Spotřeba domu",
+          "grid_l1_w": "Síť L1",
+          "grid_l2_w": "Síť L2",
+          "grid_l3_w": "Síť L3",
+          "battery_w": "Výkon baterie (+ nabíjení)",
+          "pv_today_kwh": "Výroba FVE dnes",
+          "inverter_state": "Stav střídače (run mode)"
+        }
+      },
+      "init": {
+        "title": "EMS 2.0 – nastavení",
+        "menu_options": {
+          "entities": "Entity měření",
+          "t58": "Monitor článků baterie (Solax T58)"
+        }
+      },
+      "t58": {
+        "title": "Monitor článků baterie",
+        "description": "EMS 2.0 umí přímo poslouchat komunikaci mezi střídačem a bateriemi Solax T58 přes převodník RS-485 → Ethernet (např. Waveshare ETH-RS485 v režimu transparentní TCP). Do baterie nic neposílá, jen čte. Doplněk „Solax T58 Battery Monitor“ pak není potřeba – zastav ho, převodník pustí jen jedno spojení.",
+        "data": {
+          "t58_on": "Sledovat články baterie",
+          "t58_host": "IP adresa převodníku",
+          "t58_port": "Port",
+          "t58_per_pack": "Modulů v jednom packu",
+          "t58_cells": "Entity pro každý článek (jinak jen souhrny modulů)"
+        }
       }
+    },
+    "error": {
+      "t58_fail": "Monitor článků: {msg}."
     }
   },
   "services": {
