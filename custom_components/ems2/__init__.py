@@ -52,7 +52,28 @@ def _coordinators(hass: HomeAssistant, entry_id: str | None) -> list[Ems2Coordin
     return out
 
 
+CARDS_URL = "/ems2_static/ems2-cards.js"
+
+
+async def _register_cards(hass: HomeAssistant) -> None:
+    """Karta „EMS 2.0 – spotřebiče“ pro dashboard: JS z integrace, načte se do frontendu sama (bez YAML a zdrojů)."""
+    import pathlib
+    try:
+        from homeassistant.components.frontend import add_extra_js_url
+        from homeassistant.components.http import StaticPathConfig
+        import json
+        here = pathlib.Path(__file__).parent
+        ver = json.loads((here / "manifest.json").read_text()).get("version", "0")
+        path = here / "www" / "ems2-cards.js"
+        await hass.http.async_register_static_paths([StaticPathConfig(CARDS_URL, str(path), False)])
+        add_extra_js_url(hass, f"{CARDS_URL}?v={ver}")
+    except Exception as e:      # noqa: BLE001 – bez frontendu (testy, headless) se karta jen nenačte
+        _LOGGER.debug("EMS 2.0: karta pro dashboard se nenačetla: %s", e)
+
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    if getattr(hass, "http", None) is not None:
+        await _register_cards(hass)
     async def set_tariff(call: ServiceCall) -> None:
         for coord in _coordinators(hass, call.data.get("entry_id")):
             try:

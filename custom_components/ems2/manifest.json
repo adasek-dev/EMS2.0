@@ -2,7 +2,9 @@
   "domain": "ems2",
   "name": "EMS 2.0",
   "after_dependencies": [
-    "recorder"
+    "recorder",
+    "frontend",
+    "http"
   ],
   "codeowners": [
     "@adasek-dev"
@@ -14,5 +16,5 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/adasek-dev/EMS2.0/issues",
   "requirements": [],
-  "version": "2.0.33b1"
+  "version": "2.0.34b1"
 }
