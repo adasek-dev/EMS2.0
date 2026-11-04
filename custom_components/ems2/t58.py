@@ -142,6 +142,67 @@ class T58Parser:
                 "bal": r[34] | ((r[35] & 0xC000) << 2), "energy_wh": round(r[36] / 10, 1)}
 
 
+NOMINAL_AH = 50.0                     # modul T58: 18 článků LFP 50 Ah (2 moduly v sérii = baterie 5,8 kWh)
+CAP_MIN_DSOC = 40.0                   # měřit jen přes aspoň 40 % SOC v kuse
+CAP_KEEP = 5                          # SoH = medián posledních 5 měření
+CAP_I_MIN = 2.0                       # A: pod tím baterie „stojí“ (nepřeruší měření)
+CAP_GAP_S = 120.0                     # výpadek dat delší → měření zahodit
+CAP_TURN_S = 300.0                    # opačný směr proudu déle než 5 min → konec měření
+
+
+class CapacityMeter:
+    """Skutečná kapacita modulu: počítá proud × čas (Ah) během jednoho nabíjení nebo vybíjení přes aspoň 40 % SOC.
+    kapacita = Ah ÷ změna SOC. Skok SOC o víc než 2 % najednou (BMS se dorovnává u 100 %) měření zahodí."""
+
+    def __init__(self) -> None:
+        self.caps: list[float] = []
+        self._s: dict | None = None
+
+    def soh(self) -> float | None:
+        if not self.caps:
+            return None
+        c = sorted(self.caps)
+        return round(c[len(c) // 2] / NOMINAL_AH * 100, 1)
+
+    def cap_ah(self) -> float | None:
+        if not self.caps:
+            return None
+        c = sorted(self.caps)
+        return round(c[len(c) // 2], 1)
+
+    def update(self, current: float, soc: float, now: float) -> bool:
+        """True = přibylo měření."""
+        s = self._s
+        d = 1 if current > CAP_I_MIN else (-1 if current < -CAP_I_MIN else 0)
+        if s is not None and (now - s["t"] > CAP_GAP_S or abs(soc - s["soc_last"]) > 2.0):
+            s = self._s = None                               # výpadek nebo skok SOC → znovu
+        if s is None:
+            if d:
+                self._s = {"dir": d, "soc0": soc, "soc_last": soc, "ah": 0.0, "t": now, "turn": None}
+            return False
+        s["ah"] += current * (now - s["t"]) / 3600.0
+        s["t"], s["soc_last"] = now, soc
+        if d == -s["dir"]:
+            s["turn"] = s["turn"] or now
+        elif d == s["dir"]:
+            s["turn"] = None
+        top = (s["dir"] > 0 and soc >= 97) or (s["dir"] < 0 and soc <= 5)
+        if top or (s["turn"] and now - s["turn"] >= CAP_TURN_S):
+            self._s = None
+            return self._finish(s, soc)
+        return False
+
+    def _finish(self, s: dict, soc: float) -> bool:
+        dsoc = abs(soc - s["soc0"])
+        if dsoc < CAP_MIN_DSOC or abs(s["ah"]) < 1:
+            return False
+        cap = abs(s["ah"]) / dsoc * 100
+        if not 0.4 * NOMINAL_AH <= cap <= 1.3 * NOMINAL_AH:  # nesmysl (špatné SOC, chybějící data)
+            return False
+        self.caps = (self.caps + [round(cap, 2)])[-CAP_KEEP:]
+        return True
+
+
 def summary(m: dict) -> dict:
     """Souhrny modulu pro entity a kartu."""
     c = [x for x in m["cells"] if x is not None]
@@ -164,6 +225,31 @@ class T58Monitor:
         self._task: asyncio.Task | None = None
         self._listeners: list[Callable[[], None]] = []
         self.users = 0
+        self.meters: dict[int, CapacityMeter] = {}
+        self.on_caps: Callable[[], None] | None = None    # uložit naměřené kapacity (přežijí restart HA)
+
+    def caps_state(self) -> dict:
+        return {str(s): m.caps for s, m in self.meters.items() if m.caps}
+
+    def load_caps(self, data: dict | None) -> None:
+        for s, caps in (data or {}).items():
+            try:
+                self.meters.setdefault(int(s), CapacityMeter()).caps = [float(x) for x in caps][-CAP_KEEP:]
+            except (TypeError, ValueError):
+                continue
+
+    def _measure(self, changed: set[int], now: float) -> None:
+        new = False
+        for s in changed:
+            m = self.parser.module(s, now)
+            if m:
+                soc = (self.parser.regs[s][2] & 0xFF) * 100 / 250        # přesně (0,4 %), ne zaokrouhlené
+                new |= self.meters.setdefault(s, CapacityMeter()).update(m["current"], soc, now)
+        if new and self.on_caps:
+            try:
+                self.on_caps()
+            except Exception:                               # noqa: BLE001
+                _LOGGER.exception("EMS 2.0: monitor článků – uložení kapacit")
 
     def pack_mod(self, slave: int) -> tuple[int, int]:
         return (slave - 1) // self.per_pack + 1, (slave - 1) % self.per_pack + 1
@@ -177,7 +263,9 @@ class T58Monitor:
             m = self.parser.module(s, now)
             if m:
                 p, md = self.pack_mod(s)
-                out.append({"pack": p, "mod": md, **m, **summary(m)})
+                mt = self.meters.get(s)
+                out.append({"pack": p, "mod": md, **m, **summary(m),
+                            "soh": mt.soh() if mt else None, "cap_ah": mt.cap_ah() if mt else None})
         return out
 
     def add_listener(self, cb: Callable[[], None]) -> Callable[[], None]:
@@ -224,7 +312,10 @@ class T58Monitor:
                         raise ConnectionError("převodník ukončil spojení")
                     if not self.allowed():
                         raise ConnectionError("monitor článků je součástí Premium")
-                    if self.parser.feed(data) and time.monotonic() - last_n >= 1.0:
+                    changed = self.parser.feed(data)
+                    if changed:
+                        self._measure(changed, time.monotonic())
+                    if changed and time.monotonic() - last_n >= 1.0:
                         last_n = time.monotonic()
                         self._notify()
             except asyncio.CancelledError:

@@ -61,14 +61,14 @@ async def _register_cards(hass: HomeAssistant) -> None:
     try:
         from homeassistant.components.frontend import add_extra_js_url
         from homeassistant.components.http import StaticPathConfig
-        import json
-        here = pathlib.Path(__file__).parent
-        ver = json.loads((here / "manifest.json").read_text()).get("version", "0")
-        path = here / "www" / "ems2-cards.js"
+        from homeassistant.loader import async_get_integration
+        ver = (await async_get_integration(hass, DOMAIN)).version or "0"   # bez čtení souboru v event loopu
+        path = pathlib.Path(__file__).parent / "www" / "ems2-cards.js"
         await hass.http.async_register_static_paths([StaticPathConfig(CARDS_URL, str(path), False)])
         add_extra_js_url(hass, f"{CARDS_URL}?v={ver}")
-    except Exception as e:      # noqa: BLE001 – bez frontendu (testy, headless) se karta jen nenačte
-        _LOGGER.debug("EMS 2.0: karta pro dashboard se nenačetla: %s", e)
+        _LOGGER.debug("EMS 2.0: karty pro dashboard načteny (%s?v=%s)", CARDS_URL, ver)
+    except Exception as e:      # noqa: BLE001 – bez karet integrace funguje dál, ale ať je to v logu vidět
+        _LOGGER.warning("EMS 2.0: karty pro dashboard se nenačetly: %s", e)
 
 
 def _register_ws(hass: HomeAssistant) -> None:
@@ -177,6 +177,18 @@ def _t58_start(hass: HomeAssistant, entry: ConfigEntry):
     mon = mons.get(key)
     if mon is None:
         mon = mons[key] = T58Monitor(host, port, int(opts.get(CONF_T58_PER_PACK) or 2), allowed=lambda: _premium(hass))
+        # naměřené kapacity modulů (SoH) přežijí restart HA
+        from homeassistant.helpers.storage import Store
+        store = Store(hass, 1, f"{DOMAIN}.t58_capacity")
+        mon.on_caps = None
+
+        async def _load() -> None:
+            try:
+                mon.load_caps((await store.async_load() or {}).get(key))
+            except Exception as e:                          # noqa: BLE001
+                _LOGGER.debug("EMS 2.0: kapacity modulů se nenačetly: %s", e)
+            mon.on_caps = lambda: store.async_delay_save(lambda: {key: mon.caps_state()}, 30)
+        hass.async_create_task(_load())
         mon.start(hass)
     mon.users += 1
 

@@ -28,6 +28,8 @@ MODULE_KEYS = {
     "voltage": ("Napětí modulu", "V", SensorDeviceClass.VOLTAGE, 2, None),
     "energy_wh": ("Zbývající energie", "Wh", SensorDeviceClass.ENERGY_STORAGE, 0, None),
     "balancing": ("Balancuje", "článků", None, 0, "mdi:scale-balance"),
+    "soh": ("Zdraví (SoH)", "%", None, 0, "mdi:battery-heart-variant"),
+    "cap_ah": ("Změřená kapacita", "Ah", None, 1, "mdi:battery-check"),
 }
 
 
@@ -104,7 +106,7 @@ class CellsSummary(_T58Base):
     def extra_state_attributes(self) -> dict:
         mods = self.mon.modules()
         keep = ("pack", "mod", "cells", "temps", "bal", "soc", "current", "voltage", "energy_wh", "delta_mv",
-                "cell_max", "cell_min", "temp_max", "temp_min", "balancing")
+                "cell_max", "cell_min", "temp_max", "temp_min", "balancing", "soh", "cap_ah")
         return {"modules": [{k: m.get(k) for k in keep} for m in mods], "connected": self.mon.connected,
                 "error": self.mon.error, "packs": len({m["pack"] for m in mods}),
                 "source": f"{self.mon.host}:{self.mon.port}"}

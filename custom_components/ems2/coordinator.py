@@ -177,7 +177,8 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
             if atask and atask.get("requested_at") != self._appl_task:
                 self._appl_task = atask.get("requested_at")
                 self.hass.async_create_background_task(self._send_appl_history(atask), "ems2_appl_history")
-            if self.command.get("cells") and time.monotonic() - self._last_cells >= CELLS_INTERVAL_S:
+            cells_iv = max(60, int(self.command.get("cells_interval_s") or CELLS_INTERVAL_S))   # nastavuje správce na serveru
+            if self.command.get("cells") and time.monotonic() - self._last_cells >= cells_iv:
                 self._last_cells = time.monotonic()
                 self.hass.async_create_background_task(self._send_cells(), "ems2_cells")
             if time.monotonic() - self._last_acc >= ACCOUNTING_INTERVAL_S:
@@ -348,13 +349,14 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
             self._heat_task = None
 
     async def _send_cells(self) -> None:
-        """Zdraví baterie: napětí všech článků, teploty a balancování z monitoru BMS (jednou za 15 min)."""
+        """Zdraví baterie: napětí všech článků, teploty, balancování a změřené SoH z monitoru BMS (interval ze serveru)."""
         mons = list(((self.hass.data.get(DOMAIN) or {}).get("t58") or {}).values())
         if self.t58 is not None:
             mons = [self.t58]
         mods = []
         for mon in mons:                             # vlastní monitor integrace (i pro druhou instanci – beta)
-            mods = [{k: m[k] for k in ("pack", "mod", "cells", "temps", "bal")} for m in mon.modules()]
+            mods = [{k: m[k] for k in ("pack", "mod", "cells", "temps", "bal")}
+                    | {k: m[k] for k in ("soh", "cap_ah") if m.get(k) is not None} for m in mon.modules()]
             if mods:
                 break
         if not mods:                                 # jinak senzory doplňku „Solax T58 Battery Monitor“ v HA
