@@ -11,5 +11,5 @@ from .jobctl import JobDeadline, JobEarliest
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
     c = entry.runtime_data
-    if not c.watch:
-        track_jobs(c, entry, add, lambda j, n: [JobEarliest(c, j, n), JobDeadline(c, j, n)])
+    # i u „jen sledovat“ (beta): plánuje se na serveru toho připojení, nic fyzicky neřídí
+    track_jobs(c, entry, add, lambda j, n: [JobEarliest(c, j, n), JobDeadline(c, j, n)])

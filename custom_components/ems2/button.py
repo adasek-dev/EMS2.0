@@ -15,8 +15,8 @@ from .jobctl import JobCancel, JobPlan
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
     add([Replan(entry.runtime_data)])
     c_ = entry.runtime_data
-    if not c_.watch:
-        track_jobs(c_, entry, add, lambda j, n, c=c_: [JobPlan(c, j, n), JobCancel(c, j, n)])
+    # i u „jen sledovat“ (beta): plánuje se na serveru toho připojení, nic fyzicky neřídí
+    track_jobs(c_, entry, add, lambda j, n, c=c_: [JobPlan(c, j, n), JobCancel(c, j, n)])
 
 
 class Replan(Ems2Entity, ButtonEntity):

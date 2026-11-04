@@ -73,8 +73,8 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                 "earliest": _iso(call.data.get("earliest")), "deadline": _iso(call.data.get("deadline")),
                 "then": call.data.get("then"), "kwh": call.data.get("kwh")}
         for coord in _coordinators(hass, call.data.get("entry_id")):
-            if coord.watch:
-                continue
+            if coord.watch and not call.data.get("entry_id"):
+                continue                       # beta „jen sledovat“ jen když ji akce vybere výslovně
             try:
                 await coord.api.jobs({k: v for k, v in body.items() if v is not None})
             except EmsApiError as e:
@@ -82,7 +82,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
     async def cancel_appliance(call: ServiceCall) -> None:
         for coord in _coordinators(hass, call.data.get("entry_id")):
-            if coord.watch:
+            if coord.watch and not call.data.get("entry_id"):
                 continue
             try:
                 await coord.api.jobs({"action": "cancel_next", "appliance": call.data["appliance"]})

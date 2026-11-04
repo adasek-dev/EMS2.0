@@ -15,8 +15,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     c = entry.runtime_data
     add([SettingNumber(c, k, *v) for k, v in NUMBER_SETTINGS.items()])
     c_ = entry.runtime_data
-    if not c_.watch:
-        track_jobs(c_, entry, add, lambda j, n, c=c_: [JobCount(c, j, n)])
+    # i u „jen sledovat“ (beta): plánuje se na serveru toho připojení, nic fyzicky neřídí
+    track_jobs(c_, entry, add, lambda j, n, c=c_: [JobCount(c, j, n)])
 
 
 class SettingNumber(Ems2Entity, NumberEntity):
