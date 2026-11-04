@@ -36,7 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         BoilerOut(c, "topeni_vykon", "Topení: plánovaný výkon", "power_w", "W", SensorDeviceClass.POWER,
                   "heating", "mdi:radiator"),
     ])
-    track_jobs(c, entry, add, lambda j, n: [JobPower(c, j, n), JobNext(c, j, n), JobToday(c, j, n)])
+    track_jobs(c, entry, add, lambda j, n: [JobPower(c, j, n), JobNext(c, j, n), JobToday(c, j, n), JobBest(c, j, n)])
 
 
 class SiteState(Ems2Entity, SensorEntity):
@@ -418,3 +418,24 @@ class JobToday(JobPower):
     @property
     def extra_state_attributes(self):
         return {"done": self.job.get("today_done"), "planned": self.job.get("today")}
+
+
+class JobBest(JobPower):
+    """Spotřebič s plánem: rádce – kdy je nejlevnější pustit (začátek), atributy: konec, cena, další termíny."""
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_native_unit_of_measurement = None
+
+    def __init__(self, c, job_id, name):
+        _Advice.__init__(self, c, f"spotrebic_{job_id}_nejlevneji", "Nejlevněji", "mdi:lightbulb-on-outline", group=(job_id, name))
+        self._job = job_id
+
+    @property
+    def native_value(self):
+        b = self.job.get("best") or {}
+        return dt_util.parse_datetime(b["start"]) if b.get("start") else None
+
+    @property
+    def extra_state_attributes(self):
+        b = self.job.get("best") or {}
+        return {"end": b.get("end"), "cost_kc": b.get("kc"), "now_kc": b.get("now_kc"), "kwh": b.get("kwh"),
+                "alternatives": b.get("alts")}

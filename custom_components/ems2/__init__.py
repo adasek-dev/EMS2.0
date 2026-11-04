@@ -22,7 +22,7 @@ from .coordinator import Ems2Coordinator
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH, Platform.NUMBER, Platform.SELECT,
-             Platform.BUTTON]
+             Platform.BUTTON, Platform.DATETIME]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 SET_TARIFF_SCHEMA = vol.Schema({vol.Required("tariff"): dict, vol.Optional("entry_id"): cv.string})

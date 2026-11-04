@@ -7,12 +7,16 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import NUMBER_SETTINGS
-from .entity import Ems2Entity
+from .entity import Ems2Entity, track_jobs
+from .jobctl import JobCount
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
     c = entry.runtime_data
     add([SettingNumber(c, k, *v) for k, v in NUMBER_SETTINGS.items()])
+    c_ = entry.runtime_data
+    if not c_.watch:
+        track_jobs(c_, entry, add, lambda j, n, c=c_: [JobCount(c, j, n)])
 
 
 class SettingNumber(Ems2Entity, NumberEntity):

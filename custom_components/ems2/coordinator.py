@@ -68,7 +68,8 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         self._last_acc = -1e9
         self._history_task: str | None = None       # requested_at úlohy, která už běží / proběhla
         self._heat_task: str | None = None          # totéž pro historii topení
-        self._appl_task: str | None = None          # totéž pro historii příkonu spotřebičů
+        self._appl_task: str | None = None
+        self.job_form: dict[str, dict] = {}          # spotřebiče s plánem: formulář „Naplánovat“ (jobctl)          # totéž pro historii příkonu spotřebičů
 
     # ── pomocné ──────────────────────────────────────────────────
     def _get_state(self, entity_id: str) -> tuple[str | None, dict]:
