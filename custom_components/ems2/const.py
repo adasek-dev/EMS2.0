@@ -32,6 +32,7 @@ GENERIC_KEYS = ["soc", "pv_w", "load_w", "grid_w", "battery_w", "grid_l1_w", "gr
 UPDATE_INTERVAL_S = 5           # telemetrie + povel každých 5 s
 INFO_INTERVAL_S = 300           # whoami, nastavení, plán
 ACCOUNTING_INTERVAL_S = 900
+CELLS_INTERVAL_S = 900          # zdraví baterie: snímek všech článků
 OFFLINE_FALLBACK_S = 600        # bez spojení déle než 10 min → self_use
 BUFFER_MAX = 17280              # max. 1 den měření (po 5 s) k dohnání po výpadku
 

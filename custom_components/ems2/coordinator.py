@@ -21,13 +21,13 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from .api import EmsApi, EmsApiError, EmsAuthError
-from .const import (ACCOUNTING_INTERVAL_S, BUFFER_MAX, CONF_BATTERY_INVERT, CONF_CONTROL, CONF_ENTITIES, CONF_GRID_INVERT,
+from .const import (ACCOUNTING_INTERVAL_S, CELLS_INTERVAL_S, BUFFER_MAX, CONF_BATTERY_INVERT, CONF_CONTROL, CONF_ENTITIES, CONF_GRID_INVERT,
                     CONF_PREFIX, CONF_URL, CONTROL_NONE, CONTROL_WATCH, server_tag, DEFAULT_PREFIX, DOMAIN, INFO_INTERVAL_S, OFFLINE_FALLBACK_S,
                     TELEMETRY_DEFAULTS, UPDATE_INTERVAL_S)
 from . import heating, switching
 from .heating import HeatingControl
 from .solax import SolaxAdapter, SolaxEntities, chosen_soc_max, safe_mode
-from .telemetry import appl_series, build_sample, heat_history_points, history_points, sensor_values
+from .telemetry import appl_series, build_sample, cell_snapshot, heat_history_points, history_points, sensor_values
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,6 +66,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         self._heat: tuple = (None, None, None, None, None, None)
         self._last_info = -1e9
         self._last_acc = -1e9
+        self._last_cells = -1e9
         self._history_task: str | None = None       # requested_at úlohy, která už běží / proběhla
         self._heat_task: str | None = None          # totéž pro historii topení
         self._appl_task: str | None = None
@@ -175,6 +176,9 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
             if atask and atask.get("requested_at") != self._appl_task:
                 self._appl_task = atask.get("requested_at")
                 self.hass.async_create_background_task(self._send_appl_history(atask), "ems2_appl_history")
+            if self.command.get("cells") and time.monotonic() - self._last_cells >= CELLS_INTERVAL_S:
+                self._last_cells = time.monotonic()
+                self.hass.async_create_background_task(self._send_cells(), "ems2_cells")
             if time.monotonic() - self._last_acc >= ACCOUNTING_INTERVAL_S:
                 self.accounting = (await self.api.accounting_today()).get("total", {})
                 try:
@@ -341,6 +345,18 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         except EmsApiError as e:
             _LOGGER.warning("EMS 2.0: historii topení se nepodařilo odeslat: %s", e)
             self._heat_task = None
+
+    async def _send_cells(self) -> None:
+        """Zdraví baterie: napětí všech článků, teploty a balancování z monitoru BMS (jednou za 15 min)."""
+        mods = cell_snapshot((s.entity_id, s.state) for s in self.hass.states.async_all("sensor")
+                             if s.entity_id.startswith("sensor.battery_"))
+        if not mods:
+            _LOGGER.debug("EMS 2.0: senzory článků (sensor.battery_<pack>_m<modul>_cell_NN) nenalezeny")
+            return
+        try:
+            await self.api.cells({"modules": mods})
+        except EmsApiError as e:
+            _LOGGER.warning("EMS 2.0: snímek článků se nepodařilo odeslat: %s", e)
 
     async def _send_appl_history(self, task: dict) -> None:
         """Historie příkonu spotřebičů s plánem z krátkodobých statistik HA (5min průměry, ~10 dní)."""

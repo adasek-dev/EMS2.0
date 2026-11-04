@@ -98,6 +98,9 @@ class EmsApi:
     async def heat_history(self, body: dict) -> dict:
         return await self._req("POST", self._site("/heat_history"), json=body)
 
+    async def cells(self, body: dict) -> dict:
+        return await self._req("POST", self._site("/cells"), json=body)
+
     async def appl_history(self, body: dict) -> dict:
         return await self._req("POST", self._site("/appl_history"), json=body)
 

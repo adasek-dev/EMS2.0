@@ -152,7 +152,7 @@ def heat_history_points(ents: dict, stats: dict, units: dict) -> list[dict]:
 def sensor_values(get_state: GetState, sensors: dict | None) -> dict:
     """Prémiové senzory ze serveru {klíč: {entity, kind}} → {klíč: hodnota} (výkon ve W, teplota v °C)."""
     out = {}
-    for key, spec in list((sensors or {}).items())[:12]:
+    for key, spec in list((sensors or {}).items())[:24]:
         ent, kind = (spec or {}).get("entity"), (spec or {}).get("kind")
         if not ent:
             continue
@@ -169,3 +169,43 @@ def sensor_values(get_state: GetState, sensors: dict | None) -> dict:
             if v is not None:
                 out[key] = max(0.0, v)
     return out
+
+
+_CELL_RE = None
+
+
+def cell_snapshot(states) -> list[dict]:
+    """Zdraví baterie – snímek z monitoru BMS (např. Solax T58 Battery Monitor): senzory
+    sensor.battery_<pack>_m<modul>_cell_NN, …_temp_NN a …_balancer_mask → [{pack, mod, cells, temps, bal}].
+
+    states = iterovatelné (entity_id, stav). Napětí ve V nebo mV (převede server), chybějící hodnota = None."""
+    import re
+    global _CELL_RE
+    if _CELL_RE is None:
+        _CELL_RE = re.compile(r"^sensor\.battery_(\d+)_m(\d+)_(cell|temp)_(\d+)$|^sensor\.battery_(\d+)_m(\d+)_balancer_mask$")
+    mods: dict[tuple[int, int], dict] = {}
+    for ent, st in states:
+        m = _CELL_RE.match(ent)
+        if not m:
+            continue
+        try:
+            v = float(st)
+        except (TypeError, ValueError):
+            v = None
+        if m.group(1):
+            key, kind, idx = (int(m.group(1)), int(m.group(2))), m.group(3), int(m.group(4))
+            d = mods.setdefault(key, {"cell": {}, "temp": {}, "bal": 0})
+            if 1 <= idx <= 32:
+                d[kind][idx] = round(v, 4) if v is not None else None
+        else:
+            key = (int(m.group(5)), int(m.group(6)))
+            d = mods.setdefault(key, {"cell": {}, "temp": {}, "bal": 0})
+            d["bal"] = int(v) if v is not None else 0
+    out = []
+    for (pack, mod), d in sorted(mods.items()):
+        if not d["cell"]:
+            continue
+        n, nt = max(d["cell"]), max(d["temp"]) if d["temp"] else 0
+        out.append({"pack": pack, "mod": mod, "cells": [d["cell"].get(i) for i in range(1, n + 1)],
+                    "temps": [d["temp"].get(i) for i in range(1, nt + 1)], "bal": d["bal"]})
+    return out[:64]
