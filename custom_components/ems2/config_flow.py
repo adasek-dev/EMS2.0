@@ -215,68 +215,73 @@ def _generic_schema(opts: dict) -> vol.Schema:
 
 
 class Ems2OptionsFlow(OptionsFlow):
-    """Nastavení: entity měření a monitor článků baterie."""
+    """Nastavení v jednom okně: sbalitelné části „Entity měření“ a „Monitor článků baterie“."""
+
+    def _sections(self, opts: dict) -> dict:
+        from homeassistant.data_entry_flow import section
+        generic = opts.get(CONF_CONTROL) == CONTROL_NONE
+        if generic:
+            ent_schema = _generic_schema(opts)
+        else:
+            prefix = opts.get(CONF_PREFIX) or DEFAULT_PREFIX
+            current = opts.get(CONF_ENTITIES) or {}
+            fields: dict = {
+                vol.Required(CONF_PREFIX, default=prefix): str,
+                vol.Optional(CONF_GRID_INVERT, default=opts.get(CONF_GRID_INVERT, False)): bool,
+            }
+            for k in TELEMETRY_KEYS:
+                default = current.get(k) or TELEMETRY_DEFAULTS[k].format(p=prefix)
+                fields[vol.Optional(k, description={"suggested_value": default})] = selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor"))
+            ent_schema = vol.Schema(fields)
+        t58 = vol.Schema({
+            vol.Optional("t58_on", default=bool(opts.get(CONF_T58_HOST))): bool,
+            vol.Optional(CONF_T58_HOST, description={"suggested_value": opts.get(CONF_T58_HOST) or ""}): str,
+            vol.Optional(CONF_T58_PORT, default=int(opts.get(CONF_T58_PORT) or 4196)): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=1, max=65535, step=1, mode=selector.NumberSelectorMode.BOX)),
+            vol.Optional(CONF_T58_PER_PACK, default=str(opts.get(CONF_T58_PER_PACK) or 2)): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=[
+                    selector.SelectOptionDict(value="2", label="2 moduly (Solax T58 – každá baterie má M1 a M2)"),
+                    selector.SelectOptionDict(value="1", label="1 modul"),
+                    selector.SelectOptionDict(value="3", label="3 moduly"),
+                    selector.SelectOptionDict(value="4", label="4 moduly")],
+                    mode=selector.SelectSelectorMode.DROPDOWN)),
+            vol.Optional(CONF_T58_CELLS, default=bool(opts.get(CONF_T58_CELLS))): bool,
+        })
+        return {vol.Required("entities"): section(ent_schema, {"collapsed": True}),
+                vol.Required("t58"): section(t58, {"collapsed": not opts.get(CONF_T58_HOST)})}
 
     async def async_step_init(self, user_input: dict | None = None) -> ConfigFlowResult:
-        return self.async_show_menu(step_id="init", menu_options=["entities", "t58"])
-
-    def _save(self, data: dict) -> ConfigFlowResult:
-        return self.async_create_entry(data={**self.config_entry.options, **data})
-
-    async def async_step_entities(self, user_input: dict | None = None) -> ConfigFlowResult:
-        opts = {**self.config_entry.data, **self.config_entry.options}
-        if opts.get(CONF_CONTROL) == CONTROL_NONE:
-            return await self.async_step_generic()
-        prefix = opts.get(CONF_PREFIX) or DEFAULT_PREFIX
-        current = opts.get(CONF_ENTITIES) or {}
-        if user_input is not None:
-            ents = {k: user_input[k] for k in TELEMETRY_KEYS if user_input.get(k)}
-            return self._save({CONF_PREFIX: user_input.get(CONF_PREFIX, prefix),
-                               CONF_GRID_INVERT: user_input.get(CONF_GRID_INVERT, False), CONF_ENTITIES: ents})
-        fields: dict = {
-            vol.Required(CONF_PREFIX, default=prefix): str,
-            vol.Optional(CONF_GRID_INVERT, default=opts.get(CONF_GRID_INVERT, False)): bool,
-        }
-        for k in TELEMETRY_KEYS:
-            default = current.get(k) or TELEMETRY_DEFAULTS[k].format(p=prefix)
-            fields[vol.Optional(k, description={"suggested_value": default})] = selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="sensor"))
-        return self.async_show_form(step_id="entities", data_schema=vol.Schema(fields))
-
-    async def async_step_generic(self, user_input: dict | None = None) -> ConfigFlowResult:
-        opts = {**self.config_entry.data, **self.config_entry.options}
-        if user_input is not None:
-            return self._save({
-                CONF_CONTROL: CONTROL_NONE, CONF_ENTITIES: {k: user_input[k] for k in GENERIC_KEYS if user_input.get(k)},
-                CONF_GRID_INVERT: user_input.get(CONF_GRID_INVERT, False),
-                CONF_BATTERY_INVERT: user_input.get(CONF_BATTERY_INVERT, False)})
-        return self.async_show_form(step_id="generic", data_schema=_generic_schema(opts))
-
-    async def async_step_t58(self, user_input: dict | None = None) -> ConfigFlowResult:
-        """Monitor článků baterie: převodník RS-485 → Ethernet na sběrnici střídač–baterie (jen čte)."""
         from .t58 import probe
         opts = {**self.config_entry.data, **self.config_entry.options}
         errors: dict = {}
         msg = ""
         if user_input is not None:
-            host = (user_input.get(CONF_T58_HOST) or "").strip()
-            data = {CONF_T58_HOST: host, CONF_T58_PORT: int(user_input.get(CONF_T58_PORT) or 4196),
-                    CONF_T58_PER_PACK: int(user_input.get(CONF_T58_PER_PACK) or 2),
-                    CONF_T58_CELLS: bool(user_input.get(CONF_T58_CELLS))}
-            if not host or not user_input.get("t58_on", True):
-                return self._save({**data, CONF_T58_HOST: ""})
-            # monitor už běží (stejný převodník) → druhé spojení by převodník nemusel pustit; nezkoušet
-            mon = (self.hass.data.get(DOMAIN) or {}).get("t58", {}).get(f"{host}:{data[CONF_T58_PORT]}")
-            ok, msg = (True, "") if mon else await probe(host, data[CONF_T58_PORT])
-            if ok:
-                return self._save(data)
-            errors["base"] = "t58_fail"
-        fields = {
-            vol.Optional("t58_on", default=bool(opts.get(CONF_T58_HOST))): bool,
-            vol.Optional(CONF_T58_HOST, description={"suggested_value": opts.get(CONF_T58_HOST) or ""}): str,
-            vol.Optional(CONF_T58_PORT, default=int(opts.get(CONF_T58_PORT) or 4196)): vol.All(vol.Coerce(int), vol.Range(1, 65535)),
-            vol.Optional(CONF_T58_PER_PACK, default=int(opts.get(CONF_T58_PER_PACK) or 2)): vol.All(vol.Coerce(int), vol.Range(1, 8)),
-            vol.Optional(CONF_T58_CELLS, default=bool(opts.get(CONF_T58_CELLS))): bool,
-        }
-        return self.async_show_form(step_id="t58", data_schema=vol.Schema(fields), errors=errors,
+            e = user_input.get("entities") or {}
+            t = user_input.get("t58") or {}
+            data: dict = {}
+            if opts.get(CONF_CONTROL) == CONTROL_NONE:
+                data.update({CONF_CONTROL: CONTROL_NONE, CONF_ENTITIES: {k: e[k] for k in GENERIC_KEYS if e.get(k)},
+                             CONF_GRID_INVERT: e.get(CONF_GRID_INVERT, False),
+                             CONF_BATTERY_INVERT: e.get(CONF_BATTERY_INVERT, False)})
+            else:
+                data.update({CONF_PREFIX: e.get(CONF_PREFIX) or opts.get(CONF_PREFIX) or DEFAULT_PREFIX,
+                             CONF_GRID_INVERT: e.get(CONF_GRID_INVERT, False),
+                             CONF_ENTITIES: {k: e[k] for k in TELEMETRY_KEYS if e.get(k)}})
+            host = (t.get(CONF_T58_HOST) or "").strip() if t.get("t58_on") else ""
+            port = int(float(t.get(CONF_T58_PORT) or 4196))
+            data.update({CONF_T58_HOST: host, CONF_T58_PORT: port, CONF_T58_PER_PACK: int(t.get(CONF_T58_PER_PACK) or 2),
+                         CONF_T58_CELLS: bool(t.get(CONF_T58_CELLS))})
+            if t.get("t58_on") and not host:
+                errors["base"] = "t58_fail"
+                msg = "vyplň IP adresu převodníku"
+            elif host:
+                # už běží (stejný převodník) → nezkoušet druhé spojení, převodník by ho nemusel pustit
+                mon = (self.hass.data.get(DOMAIN) or {}).get("t58", {}).get(f"{host}:{port}")
+                ok, msg = (True, "") if mon else await probe(host, port)
+                if not ok:
+                    errors["base"] = "t58_fail"
+            if not errors:
+                return self.async_create_entry(data={**self.config_entry.options, **data})
+        return self.async_show_form(step_id="init", data_schema=vol.Schema(self._sections(opts)), errors=errors,
                                     description_placeholders={"msg": msg})

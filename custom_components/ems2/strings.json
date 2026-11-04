@@ -84,56 +84,40 @@
   },
   "options": {
     "step": {
-      "generic": {
-        "title": "EMS 2.0 – entity měření",
-        "description": "Režim jen data a doporučení.",
-        "data": {
-          "soc": "SOC baterie (%) – povinné",
-          "pv_w": "Výkon FVE",
-          "load_w": "Spotřeba domu (když chybí, server ji dopočítá)",
-          "grid_w": "Výkon sítě (+ dodávka do sítě)",
-          "battery_w": "Výkon baterie (+ nabíjení)",
-          "grid_l1_w": "Síť L1",
-          "grid_l2_w": "Síť L2",
-          "grid_l3_w": "Síť L3",
-          "pv_today_kwh": "Výroba FVE dnes",
-          "grid_invert": "Obrátit znaménko sítě (když + znamená odběr)",
-          "battery_invert": "Obrátit znaménko baterie (když + znamená vybíjení)"
-        }
-      },
-      "entities": {
-        "title": "EMS 2.0 – entity měření",
-        "description": "Prázdné pole = výchozí entita SolaX Modbus podle prefixu.",
-        "data": {
-          "prefix": "Prefix entit SolaX",
-          "grid_invert": "Obrátit znaménko výkonu sítě",
-          "soc": "SOC baterie (%)",
-          "pv_w": "Výkon FVE",
-          "load_w": "Spotřeba domu",
-          "grid_l1_w": "Síť L1",
-          "grid_l2_w": "Síť L2",
-          "grid_l3_w": "Síť L3",
-          "battery_w": "Výkon baterie (+ nabíjení)",
-          "pv_today_kwh": "Výroba FVE dnes",
-          "inverter_state": "Stav střídače (run mode)"
-        }
-      },
       "init": {
         "title": "EMS 2.0 – nastavení",
-        "menu_options": {
-          "entities": "Entity měření",
-          "t58": "Monitor článků baterie (Solax T58)"
-        }
-      },
-      "t58": {
-        "title": "Monitor článků baterie",
-        "description": "EMS 2.0 umí přímo poslouchat komunikaci mezi střídačem a bateriemi Solax T58 přes převodník RS-485 → Ethernet (např. Waveshare ETH-RS485 v režimu transparentní TCP). Do baterie nic neposílá, jen čte. Doplněk „Solax T58 Battery Monitor“ pak není potřeba – zastav ho, převodník pustí jen jedno spojení.",
-        "data": {
-          "t58_on": "Sledovat články baterie",
-          "t58_host": "IP adresa převodníku",
-          "t58_port": "Port",
-          "t58_per_pack": "Modulů v jednom packu",
-          "t58_cells": "Entity pro každý článek (jinak jen souhrny modulů)"
+        "description": "Většina domů tu nic měnit nemusí – EMS 2.0 bere údaje ze SolaX Modbus sama. Rozbal jen část, kterou potřebuješ.",
+        "sections": {
+          "entities": {
+            "name": "Entity měření",
+            "description": "SOC, FVE, síť, baterie – měň jen, když používáš jiné entity než výchozí ze SolaX Modbus (prázdné pole = výchozí podle prefixu).",
+            "data": {
+              "soc": "SOC baterie (%)",
+              "pv_w": "Výkon FVE",
+              "load_w": "Spotřeba domu",
+              "grid_w": "Výkon sítě (+ dodávka do sítě)",
+              "battery_w": "Výkon baterie (+ nabíjení)",
+              "grid_l1_w": "Síť L1",
+              "grid_l2_w": "Síť L2",
+              "grid_l3_w": "Síť L3",
+              "pv_today_kwh": "Výroba FVE dnes",
+              "grid_invert": "Obrátit znaménko výkonu sítě",
+              "battery_invert": "Obrátit znaménko baterie (když + znamená vybíjení)",
+              "prefix": "Prefix entit SolaX",
+              "inverter_state": "Stav střídače (run mode)"
+            }
+          },
+          "t58": {
+            "name": "Monitor článků baterie (Solax T58)",
+            "description": "Volitelné: napětí všech článků, teploty a balancování přímo ze sběrnice baterií přes převodník RS-485 → Ethernet (např. Waveshare v režimu transparentní TCP). Jen čte. Doplněk „Solax T58 Battery Monitor“ zastav – převodník pustí jen jedno spojení.",
+            "data": {
+              "t58_on": "Sledovat články baterie",
+              "t58_host": "IP adresa převodníku",
+              "t58_port": "Port převodníku (Waveshare výchozí 4196)",
+              "t58_per_pack": "Modulů v jedné baterii",
+              "t58_cells": "Entity pro každý článek (jinak jen souhrny modulů)"
+            }
+          }
         }
       }
     },
