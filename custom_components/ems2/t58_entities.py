@@ -88,13 +88,17 @@ class CellsSummary(_T58Base):
     def available(self) -> bool:
         return bool(self.mon.modules())
 
-    def _value(self):
+    def _delta(self):
         d = [m["delta_mv"] for m in self.mon.modules() if m.get("delta_mv") is not None]
         return max(d) if d else None
 
+    def _value(self):
+        # zapsat i když se nezmění největší rozdíl, ale změní se tabulka (karta ukazuje stáří údajů)
+        return (self._delta(), tuple((tuple(m["cells"]), tuple(m["temps"]), m["bal"], m["soc"]) for m in self.mon.modules()))
+
     @property
     def native_value(self):
-        return self._value()
+        return self._delta()
 
     @property
     def extra_state_attributes(self) -> dict:

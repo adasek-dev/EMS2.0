@@ -108,7 +108,7 @@
             }
           },
           "t58": {
-            "name": "Monitor článků baterie (Solax T58)",
+            "name": "Monitor článků baterie (Solax T58) – Premium",
             "description": "Volitelné: napětí všech článků, teploty a balancování přímo ze sběrnice baterií přes převodník RS-485 → Ethernet (např. Waveshare v režimu transparentní TCP). Jen čte. Doplněk „Solax T58 Battery Monitor“ zastav – převodník pustí jen jedno spojení.",
             "data": {
               "t58_on": "Sledovat články baterie",

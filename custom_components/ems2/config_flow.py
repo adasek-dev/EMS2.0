@@ -272,7 +272,11 @@ class Ems2OptionsFlow(OptionsFlow):
             port = int(float(t.get(CONF_T58_PORT) or 4196))
             data.update({CONF_T58_HOST: host, CONF_T58_PORT: port, CONF_T58_PER_PACK: int(t.get(CONF_T58_PER_PACK) or 2),
                          CONF_T58_CELLS: bool(t.get(CONF_T58_CELLS))})
-            if t.get("t58_on") and not host:
+            from . import _premium
+            if t.get("t58_on") and not _premium(self.hass):
+                errors["base"] = "t58_fail"
+                msg = "monitor článků je součástí Premium – zapíná ho správce EMS 2.0 u domu"
+            elif t.get("t58_on") and not host:
                 errors["base"] = "t58_fail"
                 msg = "vyplň IP adresu převodníku"
             elif host:

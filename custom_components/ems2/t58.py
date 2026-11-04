@@ -155,8 +155,9 @@ def summary(m: dict) -> dict:
 class T58Monitor:
     """Spojení na převodník (jedno pro celé HA), čtení na pozadí, znovupřipojení. Moduly → (pack, modul)."""
 
-    def __init__(self, host: str, port: int, per_pack: int = 2) -> None:
+    def __init__(self, host: str, port: int, per_pack: int = 2, allowed: Callable[[], bool] | None = None) -> None:
         self.host, self.port, self.per_pack = host, int(port), max(1, int(per_pack))
+        self.allowed = allowed or (lambda: True)          # premium: bez něj se k převodníku nepřipojí
         self.parser = T58Parser()
         self.connected = False
         self.error: str | None = None
@@ -168,6 +169,8 @@ class T58Monitor:
         return (slave - 1) // self.per_pack + 1, (slave - 1) % self.per_pack + 1
 
     def modules(self) -> list[dict]:
+        if not self.allowed():
+            return []
         out = []
         now = time.monotonic()
         for s in sorted(self.parser.regs):
@@ -205,6 +208,11 @@ class T58Monitor:
         delay = 5
         while True:
             writer = None
+            if not self.allowed():                 # dům nemá Premium (nebo se to ještě neví) – zkusit za chvíli
+                self.connected, self.error = False, "monitor článků je součástí Premium"
+                self._notify()
+                await asyncio.sleep(20)
+                continue
             try:
                 reader, writer = await asyncio.wait_for(asyncio.open_connection(self.host, self.port), 10)
                 self.connected, self.error, delay = True, None, 5
@@ -214,6 +222,8 @@ class T58Monitor:
                     data = await asyncio.wait_for(reader.read(4096), STALE_S)
                     if not data:
                         raise ConnectionError("převodník ukončil spojení")
+                    if not self.allowed():
+                        raise ConnectionError("monitor článků je součástí Premium")
                     if self.parser.feed(data) and time.monotonic() - last_n >= 1.0:
                         last_n = time.monotonic()
                         self._notify()

@@ -224,8 +224,21 @@
     setConfig(config) { this._config = config || {}; this._render(); }
     static getStubConfig() { return {}; }
     getCardSize() { return 8; }
+    getGridOptions() { return { columns: "full", rows: "auto", min_columns: 6 }; }   // sekce: přes celou šířku
+    // živá data přímo z integrace (websocket) každých 5 s – do historie HA se nic nezapisuje; entita je záloha
+    connectedCallback() { this._poll(); this._timer = setInterval(() => this._poll(), (this._config && this._config.refresh_s || 5) * 1000); }
+    disconnectedCallback() { clearInterval(this._timer); }
+    _poll() {
+      if (!this._hass || !this._hass.callWS || this._busy) return;
+      this._busy = true;
+      this._hass.callWS({ type: "ems2/cells" }).then((r) => { this._ws = r; this._wsAt = Date.now(); this._render(); })
+        .catch(() => { this._ws = null; }).finally(() => { this._busy = false; });
+    }
     set hass(hass) {
+      const first = !this._hass;
       this._hass = hass;
+      if (first) this._poll();
+      if (this._ws) return;
       const st = this._state();
       const sig = st ? st.last_updated + st.state : "none";
       if (sig !== this._sig) { this._sig = sig; this._render(); }
@@ -238,8 +251,13 @@
     }
     _render() {
       if (!this.shadowRoot) this.attachShadow({ mode: "open" });
-      const st = this._state();
+      const ws = this._ws && this._ws.configured ? this._ws : null;
+      const st = ws ? { attributes: ws, last_updated: new Date(this._wsAt).toISOString() } : this._state();
       const title = esc(this._config.title || "Baterie – články");
+      if (ws && ws.premium === false) {
+        this.shadowRoot.innerHTML = `${BCSS}<ha-card><div class="hd"><b>${title}</b><span class="pill warn">Premium</span></div><p class="mut">Monitor článků baterie je součástí Premium. Zapíná ho správce EMS 2.0 u domu.</p></ha-card>`;
+        return;
+      }
       if (!st) {
         this.shadowRoot.innerHTML = `${BCSS}<ha-card><div class="hd"><b>${title}</b></div><p class="mut">Monitor článků není nastavený: Nastavení → Zařízení a služby → EMS 2.0 → Konfigurovat → Monitor článků baterie.</p></ha-card>`;
         return;
@@ -273,10 +291,10 @@
         const t = m.temp_min != null ? `${num(m.temp_min, 0)}–${num(m.temp_max, 0)}` : "–";
         rows += `<tr><th>${m.pack}·M${m.mod}</th>${tds}<td class="s${m.delta_mv >= lim ? " w" : ""}">${num(m.delta_mv, 0)}</td><td class="s">${t}</td><td class="s">${num(m.soc, 0)} %</td></tr>`;
       }
-      const ago = Math.max(0, Math.round((Date.now() - new Date(st.last_updated)) / 1000));
+      const ago = ws ? 0 : Math.max(0, Math.round((Date.now() - new Date(st.last_updated)) / 1000));
       this.shadowRoot.innerHTML = `${BCSS}<ha-card>
         <div class="hd"><span class="ic">🔋</span><b>${title}</b><span class="pill ${lvl[0]}">${lvl[1]}</span></div>
-        <div class="sub">Solax T58 · ${packs} ${packs === 1 ? "pack" : packs < 5 ? "packy" : "packů"} × ${per} ${per === 1 ? "modul" : per < 5 ? "moduly" : "modulů"} · ${nc} článků · před ${ago < 90 ? ago + " s" : Math.round(ago / 60) + " min"}</div>
+        <div class="sub">Solax T58 · ${packs} ${packs === 1 ? "pack" : packs < 5 ? "packy" : "packů"} × ${per} ${per === 1 ? "modul" : per < 5 ? "moduly" : "modulů"} · ${nc} článků · ${ws ? "živě" : "před " + (ago < 90 ? ago + " s" : Math.round(ago / 60) + " min")}</div>
         <div class="stats">
           <div><b>${num(worst.delta_mv, 0)} <small>mV</small></b><span>největší rozdíl<br>pack ${worst.pack} · M${worst.mod}</span></div>
           <div><b>${num(gn, 3)} <small>V</small></b><span>nejnižší článek<br>${low.m.pack} · M${low.m.mod} · č. ${low.i + 1}</span></div>

@@ -71,6 +71,31 @@ async def _register_cards(hass: HomeAssistant) -> None:
         _LOGGER.debug("EMS 2.0: karta pro dashboard se nenačetla: %s", e)
 
 
+def _register_ws(hass: HomeAssistant) -> None:
+    """Karta „články baterie“ si živá data bere přímo (každých pár sekund) – do historie HA se nic nezapisuje."""
+    try:
+        from homeassistant.components import websocket_api
+    except ImportError:                   # bez websocketu (testy) jen karta poběží z entity
+        return
+
+    @websocket_api.websocket_command({vol.Required("type"): "ems2/cells"})
+    @websocket_api.async_response
+    async def ws_cells(hass, connection, msg):
+        mons = list(((hass.data.get(DOMAIN) or {}).get("t58") or {}).values())
+        if not mons:
+            connection.send_result(msg["id"], {"configured": False})
+            return
+        mon = mons[0]
+        connection.send_result(msg["id"], {"configured": True, "premium": _premium(hass), "connected": mon.connected,
+                                           "error": mon.error, "modules": mon.modules(),
+                                           "source": f"{mon.host}:{mon.port}"})
+
+    try:
+        websocket_api.async_register_command(hass, ws_cells)
+    except Exception as e:                # noqa: BLE001
+        _LOGGER.debug("EMS 2.0: websocket ems2/cells: %s", e)
+
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     if getattr(hass, "http", None) is not None:
         await _register_cards(hass)
@@ -110,6 +135,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             except EmsApiError as e:
                 raise HomeAssistantError(f"EMS 2.0: {e.message}") from e
 
+    _register_ws(hass)
     hass.services.async_register(DOMAIN, "plan_appliance", plan_appliance, schema=PLAN_APPLIANCE_SCHEMA)
     hass.services.async_register(DOMAIN, "cancel_appliance", cancel_appliance, schema=CANCEL_APPLIANCE_SCHEMA)
     hass.services.async_register(DOMAIN, "set_tariff", set_tariff, schema=SET_TARIFF_SCHEMA)
@@ -120,12 +146,21 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     api = EmsApi(async_get_clientsession(hass), entry.data[CONF_URL], entry.data[CONF_SITE_ID], entry.data[CONF_TOKEN])
     coord = Ems2Coordinator(hass, entry, api)
-    coord.t58 = _t58_start(hass, entry)
     await coord.async_config_entry_first_refresh()
     entry.runtime_data = coord
+    coord.t58 = _t58_start(hass, entry)        # po prvním spojení se serverem – ví se, jestli má dům Premium
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_reload))
     return True
+
+
+def _premium(hass: HomeAssistant) -> bool:
+    """Prémiové funkce v klientovi (monitor článků): stačí, když to aspoň jeden připojený server EMS u domu potvrdí."""
+    for e in hass.config_entries.async_entries(DOMAIN):
+        c = getattr(e, "runtime_data", None)
+        if c is not None and (getattr(c, "info", None) or {}).get("premium"):
+            return True
+    return False
 
 
 def _t58_start(hass: HomeAssistant, entry: ConfigEntry):
@@ -141,7 +176,7 @@ def _t58_start(hass: HomeAssistant, entry: ConfigEntry):
     key = f"{host}:{port}"
     mon = mons.get(key)
     if mon is None:
-        mon = mons[key] = T58Monitor(host, port, int(opts.get(CONF_T58_PER_PACK) or 2))
+        mon = mons[key] = T58Monitor(host, port, int(opts.get(CONF_T58_PER_PACK) or 2), allowed=lambda: _premium(hass))
         mon.start(hass)
     mon.users += 1
 

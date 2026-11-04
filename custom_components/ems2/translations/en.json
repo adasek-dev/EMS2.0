@@ -108,7 +108,7 @@
             }
           },
           "t58": {
-            "name": "Battery cell monitor (Solax T58)",
+            "name": "Battery cell monitor (Solax T58) – Premium",
             "description": "Optional: all cell voltages, temperatures and balancing from the battery bus via an RS-485 → Ethernet converter. Read only. Stop the 'Solax T58 Battery Monitor' add-on.",
             "data": {
               "t58_on": "Monitor battery cells",
