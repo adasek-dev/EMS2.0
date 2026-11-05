@@ -52,21 +52,35 @@ def _coordinators(hass: HomeAssistant, entry_id: str | None) -> list[Ems2Coordin
     return out
 
 
-CARDS_URL = "/ems2_static/ems2-cards.js"
+CARDS_DIR = "/ems2_static"
+CARDS_URL = f"{CARDS_DIR}/ems2-cards.js"
+
+
+def _cards_server(hass: HomeAssistant) -> str:
+    """Odkud brát karty: beta server, když je v HA připojený (tester chce nejnovější karty), jinak hlavní."""
+    from urllib.parse import quote
+    from .const import CONF_CONTROL, CONF_URL, CONTROL_WATCH
+    entries = hass.config_entries.async_entries(DOMAIN)
+    pick = next((e for e in entries if {**e.data, **e.options}.get(CONF_CONTROL) == CONTROL_WATCH), None) \
+        or next(iter(entries), None)
+    url = ({**pick.data, **pick.options}.get(CONF_URL) or "").rstrip("/") if pick else ""
+    return quote(url, safe="")
 
 
 async def _register_cards(hass: HomeAssistant) -> None:
-    """Karta „EMS 2.0 – spotřebiče“ pro dashboard: JS z integrace, načte se do frontendu sama (bez YAML a zdrojů)."""
+    """Karty pro dashboard: zavaděč z integrace, samotné karty ze serveru EMS (nová verze karty bez aktualizace
+    integrace a restartu HA), když server nejde, kopie přibalená k integraci."""
     import pathlib
     try:
         from homeassistant.components.frontend import add_extra_js_url
         from homeassistant.components.http import StaticPathConfig
         from homeassistant.loader import async_get_integration
         ver = (await async_get_integration(hass, DOMAIN)).version or "0"   # bez čtení souboru v event loopu
-        path = pathlib.Path(__file__).parent / "www" / "ems2-cards.js"
-        await hass.http.async_register_static_paths([StaticPathConfig(CARDS_URL, str(path), False)])
-        add_extra_js_url(hass, f"{CARDS_URL}?v={ver}")
-        _LOGGER.debug("EMS 2.0: karty pro dashboard načteny (%s?v=%s)", CARDS_URL, ver)
+        path = pathlib.Path(__file__).parent / "www"
+        await hass.http.async_register_static_paths([StaticPathConfig(CARDS_DIR, str(path), False)])
+        srv = _cards_server(hass)
+        add_extra_js_url(hass, f"{CARDS_URL}?v={ver}" + (f"&srv={srv}" if srv else ""))
+        _LOGGER.debug("EMS 2.0: karty pro dashboard (%s?v=%s, server %s)", CARDS_URL, ver, srv)
     except Exception as e:      # noqa: BLE001 – bez karet integrace funguje dál, ale ať je to v logu vidět
         _LOGGER.warning("EMS 2.0: karty pro dashboard se nenačetly: %s", e)
 
