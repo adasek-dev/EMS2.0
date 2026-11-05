@@ -28,7 +28,7 @@ GetState = Callable[[str], tuple[str | None, dict]]
 
 MODE1_AUTOREPEAT_S = 900
 MODE8_AUTOREPEAT_S = 900
-MODE8_DURATION_S = 60        # platnost jednoho zápisu dálkového řízení: vydrží i 2–3 nepovedená čtení Modbusu
+MODE8_DURATION_S = 20        # platnost jednoho zápisu dálkového řízení (number.solax_remotecontrol_duration) – vždy 20 s
 WATCHDOG_S = 60
 STUCK_AFTER_S = 120
 STUCK_COOLDOWN_S = 300
@@ -142,7 +142,7 @@ class SolaxAdapter:
         main_state, _ = get_state(e.select_main)
         if main_state in ("unknown", "unavailable", None):
             # krátký výpadek čtení Modbusu (timeout): nic neposílat a nic nevypínat – střídač drží poslední
-            # povel (remotecontrol_duration 60 s); po obnovení čtení se povel pošle celý znovu
+            # povel (remotecontrol_duration 20 s); po obnovení čtení se povel pošle celý znovu
             self.reset()
             return []
 
@@ -239,6 +239,14 @@ class SolaxAdapter:
                 self.last_target = target
             self.last_main, self.last_modbus = main, modbus
 
+        # doba platnosti povelu vždy 20 s – i když ji někdo změní ručně
+        dur, _ = get_state(e.duration_mode8)
+        try:
+            if dur is not None and abs(float(dur) - MODE8_DURATION_S) > 0.5 and not any(
+                    c[2].get("entity_id") == e.duration_mode8 for c in out):
+                out.insert(0, _num(e.duration_mode8, MODE8_DURATION_S))
+        except (TypeError, ValueError):
+            pass
         self.applied_mode = mode
         return self._present(out, get_state)
 
