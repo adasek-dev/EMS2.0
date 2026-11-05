@@ -4,7 +4,8 @@
  * plánování (nejdřív od, hotovo do, kolikrát, po něm spustit, naplánovat, zrušit) a stav (pustit teď,
  * další běh, dnes hotovo, rádce „nejlevněji“ s dalšími termíny). Bez YAML: Přidat kartu → „EMS 2.0 – spotřebiče“.
  *
- * Volitelná nastavení karty: prefix (např. ems2_beta_ – jen spotřebiče z bety), appliances: [pracka, mycka], title.
+ * Volitelná nastavení karty: prefix (např. ems2_beta_ – jen spotřebiče z bety), appliances: [Pračka, Myčka] (název
+ * jako v EMS, na velikosti a háčcích nezáleží), title.
  */
 (() => {
   const VER = "2.0.35";
@@ -45,8 +46,16 @@
         pref = main.length ? "ems2_" : (found[0] || {}).prefix;
       }
       let out = found.filter((x) => x.prefix === pref);
-      if (Array.isArray(this._config.appliances) && this._config.appliances.length) {
-        out = this._config.appliances.map((a) => out.find((x) => x.id === a)).filter(Boolean);
+      let want = this._config.appliances;
+      if (want != null && !Array.isArray(want)) want = [want];          // appliances: Pračka (bez seznamu)
+      if (want && want.length) {
+        // podle názvu (Pračka / pracka / PRACKA), interního označení (pa1b2c3) nebo celé entity
+        const norm = (v) => String(v == null ? "" : v).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const nameOf = (x) => { const p = h.states[`sensor.${x.prefix}spotrebic_${x.id}_vykon`]; const at = (p && p.attributes) || {};
+          return at.name || (at.friendly_name || "").replace(/\s*Plánovaný výkon$/, ""); };
+        out = want.map((w) => { const k = norm(w);
+          return out.find((x) => norm(x.id) === k) || out.find((x) => norm(nameOf(x)) === k)
+            || out.find((x) => k.includes(norm(`spotrebic_${x.id}_`))); }).filter(Boolean);
       }
       return out;
     }
@@ -69,7 +78,7 @@
       const apps = this._apps = this._appliances();
       const title = this._config.title;
       if (!apps.length) {
-        this.shadowRoot.innerHTML = `${STYLE}<ha-card><div class="empty">${title ? `<h2>${esc(title)}</h2>` : ""}Žádné spotřebiče s plánem. Přidej je v EMS 2.0 → Nastavení → Spotřebiče s plánem.</div></ha-card>`;
+        this.shadowRoot.innerHTML = `${STYLE}<ha-card><div class="empty">${title ? `<h2>${esc(title)}</h2>` : ""}${this._config.appliances ? `Spotřebič „${esc([].concat(this._config.appliances).join(", "))}“ nenalezen. Napiš název jako v EMS (např. Pračka).` : "Žádné spotřebiče s plánem. Přidej je v EMS 2.0 → Nastavení → Spotřebiče s plánem."}</div></ha-card>`;
         return;
       }
       const html = apps.map((a) => this._appHtml(a)).join("");
