@@ -66,7 +66,7 @@
       return JSON.stringify(apps.map((a) => ["sensor:vykon", "sensor:dalsi", "sensor:dnes", "sensor:nejlevneji", "binary_sensor:pustit",
         "datetime:od", "datetime:do", "number:kolikrat", "select:potom"].map((k) => {
         const [dom, key] = k.split(":"); const s = this._st(a, dom, key);
-        return s ? [s.state, s.attributes.schedule ? s.attributes.schedule.length : 0, s.attributes.alternatives ? JSON.stringify(s.attributes.alternatives) : "", (s.attributes.options || []).join(",")] : null;
+        return s ? [s.state, s.attributes.schedule ? s.attributes.schedule.length : 0, s.attributes.alternatives ? JSON.stringify(s.attributes.alternatives) : "", (s.attributes.options || []).join(","), s.attributes.planned_kc == null ? "" : s.attributes.planned_kc] : null;
       })).concat(Object.entries(this._alt || {})));
     }
 
@@ -118,12 +118,13 @@
           <div><span>Další běh</span><b>${next && next.state && next.state !== "unknown" && next.state !== "unavailable" ? `${dayWord(next.state)} ${fmtTime(next.state)}${(next.attributes || {}).next_end ? "–" + fmtTime(next.attributes.next_end) : ""}` : "–"}</b></div>
           <div><span>Dnes hotovo</span><b>${today && today.state !== "unknown" ? esc(today.state) : "–"}</b></div>
         </div>
-        ${al ? `<div class="best"><div>💡 <b>${bestTxt}</b><small>${bestSub}</small></div>
-          <div class="best-act">${canPlan ? `<button class="link" data-act="here">Naplánovat sem</button>` : ""}${alts.length > 1 ? `<button class="link" data-act="other">jiný termín ›</button>` : ""}</div></div>` : ""}
+        ${al ? `<div class="best${at.planned_kc != null ? " two" : ""}"><div class="bl"><div>💡 <b>${bestTxt}</b><small>${bestSub}</small></div>
+          <div class="best-act">${canPlan ? `<button class="link" data-act="here">Naplánovat sem</button>` : ""}${alts.length > 1 ? `<button class="link" data-act="other">jiný termín ›</button>` : ""}</div></div>
+          ${at.planned_kc != null ? `<div class="pl"><span>${runNow ? "Běh teď" : "Naplánovaný běh"}</span><b>≈ ${kc(at.planned_kc)}</b><small>${alts.length ? (at.planned_kc < alts[0].kc - 0.05 ? `o ${kc(alts[0].kc - at.planned_kc)} míň – FVE / baterie` : at.planned_kc <= alts[0].kc + 0.05 ? "jako nejlevněji" : `o ${kc(at.planned_kc - alts[0].kc)} víc než nejlevněji`) : ""}</small></div>` : ""}</div>` : ""}
         ${canPlan ? `
         <div class="form">
-          <div class="f full"><label>Hotovo do</label><div class="dt"><input type="date" data-f="do-d" value="${doD}"><input type="time" data-f="do-t" value="${doT}"></div></div>
           <div class="f full"><label>Nejdřív od</label><div class="dt"><input type="date" data-f="od-d" value="${odD}"><input type="time" data-f="od-t" value="${odT}"></div></div>
+          <div class="f full"><label>Hotovo do</label><div class="dt"><input type="date" data-f="do-d" value="${doD}"><input type="time" data-f="do-t" value="${doT}"></div></div>
           <div class="f"><label>Kolikrát</label><div class="cnt"><button data-act="minus" aria-label="Méně">−</button><span>${cnt ? Math.round(Number(cnt.state) || 1) : 1}</span><button data-act="plus" aria-label="Více">+</button></div></div>
           ${opts.length > 1 ? `<div class="f"><label>Po něm spustit</label><select data-f="then">${opts.map((o) => `<option ${then && then.state === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></div>` : ""}
         </div>
@@ -201,6 +202,10 @@
     .best { border: 1px solid var(--divider-color, rgba(127,127,127,.25)); border-radius: 10px; padding: 8px 10px; margin-bottom: 12px; }
     .best b { font-weight: 500; } .best small { display: block; font-size: 12px; color: var(--secondary-text-color); margin-top: 2px; }
     .best-act { display: flex; gap: 14px; margin-top: 6px; }
+    .best.two { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
+    .best .pl { border-left: 1px solid var(--divider-color, rgba(127,127,127,.25)); padding-left: 12px; text-align: right; min-width: 118px; }
+    .best .pl span { display: block; font-size: 11px; color: var(--secondary-text-color); }
+    .best .pl b { display: block; font-size: 18px; font-weight: 600; margin: 1px 0; }
     .link { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--primary-color); cursor: pointer; }
     .form { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin-bottom: 12px; }
     .form label { font-size: 12px; color: var(--secondary-text-color); margin-top: 6px; }
