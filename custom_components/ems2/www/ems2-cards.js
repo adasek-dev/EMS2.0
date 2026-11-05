@@ -24,6 +24,7 @@
     setConfig(config) { this._config = config || {}; this._alt = {}; this._render(); }
     static getStubConfig() { return {}; }
     getCardSize() { return 6 * Math.max(1, (this._apps || []).length); }
+    getGridOptions() { return { columns: "full", rows: "auto", min_columns: 6 }; }   // sekce: přes celou šířku → spotřebiče vedle sebe
     set hass(hass) {
       this._hass = hass;
       const sig = this._signature();
