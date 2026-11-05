@@ -126,16 +126,44 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
             task.cancel()
         entry.async_on_unload(_stop)
 
+    events_ok: bool = False
+    _quick: asyncio.Task | None = None
+    _quick_again: bool = False
+
     def _on_change(self) -> None:
-        self.hass.async_create_task(self.async_request_refresh())
+        self.quick_refresh()
+
+    def quick_refresh(self, delay: float = 0.3) -> None:
+        """Stáhnout povel hned (po změně ze serveru nebo po akci v HA) – bez 10s pauzy debounceru HA.
+        Víc požadavků naráz se spojí do jednoho."""
+        if self._quick is not None and not self._quick.done():
+            self._quick_again = True                       # změna během obnovy → ještě jednou po ní
+            return
+
+        async def run() -> None:
+            await asyncio.sleep(delay)
+            while True:
+                self._quick_again = False
+                t0 = time.monotonic()
+                await self.async_refresh()
+                _LOGGER.debug("EMS 2.0: rychlá obnova za %.1f s", time.monotonic() - t0)
+                if not self._quick_again:
+                    break
+        self._quick = self.hass.async_create_background_task(run(), "ems2_quick_refresh")
+
+    def _events_open(self) -> None:
+        self.events_ok = True
+        _LOGGER.debug("EMS 2.0: události ze serveru připojeny")
+        self.quick_refresh()                               # po (znovu)připojení nic nezmeškat
 
     async def _events_loop(self) -> None:
         delay = 3
         while True:
             t0 = time.monotonic()
             try:
-                await self.api.events(self._on_change)
+                await self.api.events(self._on_change, self._events_open)
             except asyncio.CancelledError:
+                self.events_ok = False
                 raise
             except EmsApiError as e:
                 if e.status in (404, 405):                 # starší server – zkusit zase za hodinu
@@ -144,6 +172,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
                 _LOGGER.debug("EMS 2.0: události ze serveru: %s", e)
             except Exception as e:                         # noqa: BLE001 – spadlé spojení, restart API, proxy…
                 _LOGGER.debug("EMS 2.0: události ze serveru: %s", e)
+            self.events_ok = False
             if time.monotonic() - t0 > 60:
                 delay = 3                                  # spojení chvíli drželo → znovu hned
             await asyncio.sleep(delay)
@@ -436,7 +465,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
     def snapshot(self) -> dict[str, Any]:
         return {"command": self.command, "applied": self.applied, "info": self.info, "settings": self.settings,
                 "plan": self.plan, "accounting": self.accounting, "connected": self.connected,
-                "last_error": self.last_error, "buffered": len(self.buffer),
+                "last_error": self.last_error, "buffered": len(self.buffer), "events_ok": self.events_ok,
                 "advice": (self.command or {}).get("advice"), "advice_only": self.advice_only,
                 "billing": self.billing}
 

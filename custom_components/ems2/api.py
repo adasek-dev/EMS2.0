@@ -50,7 +50,7 @@ class EmsApi:
     def _site(self, sub: str) -> str:
         return f"/sites/{self.site_id}{sub}"
 
-    async def events(self, on_change) -> None:
+    async def events(self, on_change, on_open=None) -> None:
         """Server-sent events: na každou „change“ zavolá on_change(). Vrátí se, když spojení skončí.
         EmsApiError(404) = server je starší a události neumí."""
         url = f"{self.url}/api/v1{self._site('/events')}"
@@ -58,6 +58,8 @@ class EmsApi:
         async with self._s.get(url, headers={**self._headers, "Accept": "text/event-stream"}, timeout=timeout) as r:
             if r.status >= 400:
                 raise (EmsAuthError if r.status == 401 else EmsApiError)(r.status, "události nejdou")
+            if on_open:
+                on_open()
             async for line in r.content:
                 if line.startswith(b"event: change"):
                     on_change()

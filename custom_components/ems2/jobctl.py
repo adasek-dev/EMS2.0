@@ -153,7 +153,7 @@ class JobPlan(_JobCtl, ButtonEntity):
         except EmsApiError as e:
             raise HomeAssistantError(f"EMS 2.0: {e.message}: {'; '.join(e.problems)}") from e
         _reset(self.coordinator, self._job)
-        await self.coordinator.async_request_refresh()
+        self.coordinator.quick_refresh(0.1)
 
 
 class JobCancel(_JobCtl, ButtonEntity):
@@ -167,4 +167,4 @@ class JobCancel(_JobCtl, ButtonEntity):
             await self.coordinator.api.jobs({"action": "cancel_next", "appliance": self._job})
         except EmsApiError as e:
             raise HomeAssistantError(f"EMS 2.0: {e.message}") from e
-        await self.coordinator.async_request_refresh()
+        self.coordinator.quick_refresh(0.1)

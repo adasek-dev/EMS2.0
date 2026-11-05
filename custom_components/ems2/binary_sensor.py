@@ -33,7 +33,8 @@ class Connected(Ems2Entity, BinarySensorEntity):
 
     @property
     def extra_state_attributes(self):
-        return {"last_error": self.d.get("last_error"), "buffered_samples": self.d.get("buffered")}
+        return {"last_error": self.d.get("last_error"), "buffered_samples": self.d.get("buffered"),
+                "okamzite_zmeny": "připojeno" if self.d.get("events_ok") else "nepřipojeno"}
 
 
 class HdoLow(Ems2Entity, BinarySensorEntity):
