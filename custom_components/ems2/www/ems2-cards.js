@@ -22,7 +22,7 @@
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   class Ems2AppliancesCard extends HTMLElement {
-    setConfig(config) { this._config = config || {}; this._alt = {}; this._render(); }
+    setConfig(config) { this._config = config || {}; this._alt = {}; this._busy = {}; this._render(); }
     static getStubConfig() { return {}; }
     getCardSize() { return 6 * Math.max(1, (this._apps || []).length); }
     getGridOptions() { return { columns: "full", rows: "auto", min_columns: 6 }; }   // sekce: přes celou šířku → spotřebiče vedle sebe
@@ -66,11 +66,23 @@
       return JSON.stringify(apps.map((a) => ["sensor:vykon", "sensor:dalsi", "sensor:dnes", "sensor:nejlevneji", "binary_sensor:pustit",
         "datetime:od", "datetime:do", "number:kolikrat", "select:potom"].map((k) => {
         const [dom, key] = k.split(":"); const s = this._st(a, dom, key);
-        return s ? [s.state, s.attributes.schedule ? s.attributes.schedule.length : 0, s.attributes.alternatives ? JSON.stringify(s.attributes.alternatives) : "", (s.attributes.options || []).join(","), s.attributes.planned_kc == null ? "" : s.attributes.planned_kc] : null;
+        return s ? [s.state, s.attributes.schedule ? s.attributes.schedule.length : 0, s.attributes.alternatives ? JSON.stringify(s.attributes.alternatives) : "", (s.attributes.options || []).join(","), s.attributes.planned_kc == null ? "" : s.attributes.planned_kc,
+          s.attributes.next_provisional ? 1 : 0, s.attributes.next_id || "", s.attributes.waiting || 0, s.attributes.today || 0] : null;
       })).concat(Object.entries(this._alt || {})));
     }
 
     _call(domain, service, data) { return this._hass.callService(domain, service, data); }
+    _startBusy(a, vals) {
+      const p = this._st(a, "sensor", "vykon");
+      this._busy[a.id] = { vals, snap: JSON.stringify((p && p.attributes) || {}), sent: false, until: Date.now() + 90000 };
+      this._sig = null; this._render();
+    }
+    _sentBusy(a) {
+      const b = this._busy[a.id]; if (!b) return;
+      b.sent = true;                                   // od teď čekat na změnu od serveru (nový běh v plánu)
+      clearTimeout(this._busyT); this._busyT = setTimeout(() => { this._sig = null; this._render(); }, 91000);
+      this._sig = null; this._render();
+    }
 
     _render() {
       if (!this.shadowRoot) this.attachShadow({ mode: "open" });
@@ -96,7 +108,12 @@
       const od = this._st(a, "datetime", "od"), dd = this._st(a, "datetime", "do"), cnt = this._st(a, "number", "kolikrat"), then = this._st(a, "select", "potom");
       const canPlan = !!(dd && this._st(a, "button", "naplanovat"));
       const split = (s) => { if (!s || !s.state || s.state === "unknown" || s.state === "unavailable") return ["", ""]; const d = new Date(s.state.replace(" ", "T")); return [`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, `${pad(d.getHours())}:${pad(d.getMinutes())}`]; };
-      const [odD, odT] = split(od), [doD, doT] = split(dd);
+      let [odD, odT] = split(od), [doD, doT] = split(dd);
+      // po „Naplánovat“: dokud server běh nezařadí, držet zadané časy a „Plánuji…“ (formulář v HA se mezitím vrátí na výchozí)
+      const busy = this._busy && this._busy[a.id];
+      if (busy && (busy.sent && JSON.stringify(at) !== busy.snap || Date.now() > busy.until)) delete this._busy[a.id];
+      else if (busy) [odD, odT, doD, doT] = busy.vals;
+      const planning = !!(this._busy && this._busy[a.id]);
       // rádce: nejlevnější termín a další (tlačítko „jiný termín“ jimi prochází)
       const alts = ((best && best.attributes.alternatives) || []);
       const k = Math.min(this._alt[a.id] || 0, Math.max(0, alts.length - 1));
@@ -107,7 +124,7 @@
       const bestTxt = al ? `${k === 0 ? "Nejlevněji" : `${k + 1}. nejlevnější`} ${soon ? "hned teď" : `${dayWord(al.start)} ${fmtTime(al.start)}–${fmtTime(al.end)}`}${night && !soon ? " 🌙" : ""}` : "";
       const bestSub = al ? `≈ ${kc(al.kc)}${nowKc != null && nowKc > al.kc + 0.05 && !soon ? ` · teď by to stálo ${kc(nowKc)}` : ""}` : "";
       const pill = runNow ? `<span class="pill run">● pusť teď${at.run_until ? ` do ${fmtTime(at.run_until)}` : ""}</span>`
-        : (next && next.state && next.state !== "unknown" && next.state !== "unavailable") ? `<span class="pill">další ${dayWord(next.state)} ${fmtTime(next.state)}</span>`
+        : (next && next.state && next.state !== "unknown" && next.state !== "unavailable") ? `<span class="pill${at.next_provisional ? " prov" : ""}" title="${at.next_provisional ? "Předběžně podle rady – celý plán ho za chvíli potvrdí nebo posune" : ""}">další ${dayWord(next.state)} ${fmtTime(next.state)}${at.next_provisional ? " · předběžně" : ""}</span>`
         : `<span class="pill idle">nic naplánováno</span>`;
       const opts = then ? (then.attributes.options || []) : [];
       return `
@@ -128,7 +145,7 @@
           <div class="f"><label>Kolikrát</label><div class="cnt"><button data-act="minus" aria-label="Méně">−</button><span>${cnt ? Math.round(Number(cnt.state) || 1) : 1}</span><button data-act="plus" aria-label="Více">+</button></div></div>
           ${opts.length > 1 ? `<div class="f"><label>Po něm spustit</label><select data-f="then">${opts.map((o) => `<option ${then && then.state === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></div>` : ""}
         </div>
-        <div class="btns"><button class="pri" data-act="plan">Naplánovat</button><button class="sec" data-act="cancel">Zrušit další</button></div>` : ""}
+        <div class="btns"><button class="pri" data-act="plan"${planning ? " disabled" : ""}>${planning ? "Plánuji…" : "Naplánovat"}</button><button class="sec" data-act="cancel">Zrušit další</button></div>` : ""}
       </ha-card>`;
     }
 
@@ -154,10 +171,10 @@
           if (act === "plus" || act === "minus") {
             this._call("number", "set_value", { entity_id: this._e(a, "number", "kolikrat"), value: Math.max(1, Math.min(8, n + (act === "plus" ? 1 : -1))) });
           } else if (act === "plan") {
-            b.disabled = true; b.textContent = "Plánuji…";
-            try { await this._call("button", "press", { entity_id: this._e(a, "button", "naplanovat") }); b.textContent = "✓ Naplánováno"; }
-            catch (e) { b.textContent = "Chyba"; }
-            setTimeout(() => this._render(), 1500);
+            const v = (sel) => (q(sel) || {}).value || "";
+            this._startBusy(a, [v('[data-f="od-d"]'), v('[data-f="od-t"]'), v('[data-f="do-d"]'), v('[data-f="do-t"]')]);
+            try { await this._call("button", "press", { entity_id: this._e(a, "button", "naplanovat") }); this._sentBusy(a); }
+            catch (e) { delete this._busy[a.id]; this._sig = null; this._render(); }
           } else if (act === "cancel") {
             await this._call("button", "press", { entity_id: this._e(a, "button", "zrusit") });
           } else if (act === "other") {
@@ -169,10 +186,14 @@
             const al = alts[Math.min(this._alt[a.id] || 0, alts.length - 1)]; if (!al) return;
             const loc = (iso) => { const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`; };
             b.disabled = true;
-            await this._call("datetime", "set_value", { entity_id: this._e(a, "datetime", "od"), datetime: loc(al.start) });
-            await this._call("datetime", "set_value", { entity_id: this._e(a, "datetime", "do"), datetime: loc(al.end) });
-            await this._call("button", "press", { entity_id: this._e(a, "button", "naplanovat") });
-            b.textContent = "✓ Naplánováno"; setTimeout(() => this._render(), 1500);
+            const [sd, st] = loc(al.start).split(" "), [ed, et] = loc(al.end).split(" ");
+            this._startBusy(a, [sd, st.slice(0, 5), ed, et.slice(0, 5)]);
+            try {
+              await this._call("datetime", "set_value", { entity_id: this._e(a, "datetime", "od"), datetime: loc(al.start) });
+              await this._call("datetime", "set_value", { entity_id: this._e(a, "datetime", "do"), datetime: loc(al.end) });
+              await this._call("button", "press", { entity_id: this._e(a, "button", "naplanovat") });
+              this._sentBusy(a);
+            } catch (e) { delete this._busy[a.id]; this._sig = null; this._render(); }
           }
         }));
       }
@@ -194,6 +215,7 @@
     .pill { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 99px; white-space: nowrap;
       background: rgba(99,102,241,.16); color: var(--primary-color); }
     .pill.run { background: rgba(16,185,129,.16); color: #10b981; }
+    .pill.prov { background: rgba(245,158,11,.16); color: #f59e0b; }
     .pill.idle { background: var(--secondary-background-color, rgba(127,127,127,.12)); color: var(--secondary-text-color); }
     .stat { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 10px; }
     .stat > div { background: var(--secondary-background-color, rgba(127,127,127,.08)); border-radius: 10px; padding: 8px 10px; }
