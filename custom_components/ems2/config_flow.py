@@ -12,7 +12,7 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import EmsApi, EmsApiError, EmsAuthError
-from .const import (CONF_BATTERY_INVERT, CONF_CONTROL, CONF_ENTITIES, CONF_GRID_INVERT, CONF_PREFIX, CONF_SITE_ID,
+from .const import (CONF_BATTERY_INVERT, CONF_CONTROL, CONF_ENTITIES, CONF_GRID_INVERT, CONF_MODE8_GRID, CONF_PREFIX, CONF_SITE_ID,
                     CONF_TOKEN, CONF_URL, CONTROL_NONE, CONTROL_WATCH, server_tag, CONTROL_SOLAX, DEFAULT_PREFIX, DEFAULT_URL, DOMAIN,
                     GENERIC_KEYS, TELEMETRY_DEFAULTS, TELEMETRY_KEYS, CONF_T58_HOST, CONF_T58_PORT, CONF_T58_PER_PACK,
                     CONF_T58_CELLS)
@@ -228,6 +228,7 @@ class Ems2OptionsFlow(OptionsFlow):
             fields: dict = {
                 vol.Required(CONF_PREFIX, default=prefix): str,
                 vol.Optional(CONF_GRID_INVERT, default=opts.get(CONF_GRID_INVERT, False)): bool,
+                vol.Optional(CONF_MODE8_GRID, default=bool(opts.get(CONF_MODE8_GRID, False))): bool,
             }
             for k in TELEMETRY_KEYS:
                 default = current.get(k) or TELEMETRY_DEFAULTS[k].format(p=prefix)
@@ -267,6 +268,7 @@ class Ems2OptionsFlow(OptionsFlow):
             else:
                 data.update({CONF_PREFIX: e.get(CONF_PREFIX) or opts.get(CONF_PREFIX) or DEFAULT_PREFIX,
                              CONF_GRID_INVERT: e.get(CONF_GRID_INVERT, False),
+                             CONF_MODE8_GRID: bool(e.get(CONF_MODE8_GRID, False)),
                              CONF_ENTITIES: {k: e[k] for k in TELEMETRY_KEYS if e.get(k)}})
             host = (t.get(CONF_T58_HOST) or "").strip() if t.get("t58_on") else ""
             port = int(float(t.get(CONF_T58_PORT) or 4196))

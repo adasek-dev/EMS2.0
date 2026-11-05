@@ -11,6 +11,8 @@ Převzato z Node-RED „6 · EXECUTOR“ v3.35 (jen část provedení, ekonomika
     sell       Mode 1 „Enabled Grid Control“, cílový odběr = −W (dodávka)
     pv_export  Mode 8 „Enabled Feedin Priority“
     no_export  Mode 8 „Negative Injection Price“
+Zkušebně (mode8_grid): charge a sell přes Mode 8/9 „Enabled Grid Control“, push power = cíl na elektroměru
+(+ dodávka, − odběr) místo Mode 1.
 Pojistky: autorepeat 900 s a watchdog (≤ 60 s zbývá → znovu Trigger), přechod Mode 8 → Mode 1
 bez zrušení prodeje (v3.19), výpadek čtení („unknown“ select) přečká bez vypnutí řízení a pak povel
 pošle celý znovu, reset zaseknutí v (R) módu po 2 min.
@@ -56,6 +58,7 @@ class SolaxEntities:
         self.run_mode = f"sensor.{p}_run_mode"
         # horní mez nabití v dálkovém řízení – některé střídače ji drží i v Mode 1 (např. 95 %)
         self.target_soc = f"number.{p}_remotecontrol_target_soc_8_9"
+        self.push8 = f"number.{p}_remotecontrol_push_mode_power_8_9"     # Mode 8 Grid Control: + dodávka, − odběr
 
     def required(self) -> list[str]:
         return [self.select_main, self.select_modbus, self.trigger, self.autorepeat,
@@ -83,6 +86,8 @@ class SolaxAdapter:
     ent: SolaxEntities = field(default_factory=SolaxEntities)
     max_import_w: int = 15000
     max_export_w: int = 15000
+    mode8_grid: bool = False                  # zkušební: nabíjení / prodej přes Mode 8/9 Grid Control
+    last_push: int | None = None
     # vnitřní stav (jako flow.set v Node-RED)
     last_main: str | None = None
     last_modbus: str | None = None
@@ -105,6 +110,7 @@ class SolaxAdapter:
     def reset(self) -> None:
         self.last_main = self.last_modbus = self.last_slot = None
         self.last_target = None
+        self.last_push = None
 
     def _target_soc_calls(self, mode: str, soc_max: float | None, get_state: GetState) -> list[Call]:
         """Nabíjení na vyšší strop (balancing, ochrana, strop 100 %) než cílový SOC dálkového řízení:
@@ -140,9 +146,17 @@ class SolaxAdapter:
             self.reset()
             return []
 
-        use_mode8 = mode in MODE8_SUBMODE
-        submode = MODE8_SUBMODE.get(mode, "Disabled")
-        if mode in ("charge", "sell"):
+        grid8 = self.mode8_grid and mode in ("charge", "sell")
+        use_mode8 = mode in MODE8_SUBMODE or grid8
+        submode = "Enabled Grid Control" if grid8 else MODE8_SUBMODE.get(mode, "Disabled")
+        push = None
+        if grid8:
+            push = int(grid_w or 0)                            # povel: grid_w + = dodávka = Mode 8 push +
+            push = max(-self.max_import_w, min(self.max_export_w, push))
+            push = int(round(push / 100.0) * 100)
+            push = min(push, 0) if mode == "charge" else max(push, 0)
+            main, target = "Disabled", None
+        elif mode in ("charge", "sell"):
             main = "Enabled Grid Control"
             target = int(-(grid_w or 0))                       # povel: grid_w + = dodávka → SolaX: + = odběr
             target = max(-self.max_export_w, min(self.max_import_w, target))
@@ -177,6 +191,8 @@ class SolaxAdapter:
             self.mode8_active, self.mode8_submode = True, str(ha_mode8)     # po restartu HA běží Mode 8 dál
         if use_mode8:
             changed = self.mode8_submode != submode or (ha_mode8 not in (None, submode))
+            if grid8 and (self.last_push is None or abs(push - self.last_push) >= TARGET_DELTA_W or self.last_slot != slot):
+                changed = True                    # nový cíl na elektroměru (nebo nová čtvrthodina) → poslat znovu
             watchdog = self.mode8_active and not changed and remaining <= WATCHDOG_S
             # z Mode 1 do Mode 8: Mode 1 vypnout – jen když opravdu běží (po výpadku čtení nebo restartu HA
             # rozhoduje skutečný stav selectu, ne prázdná paměť), a NEJDŘÍV, ať trigger Mode 8 zůstane poslední
@@ -186,8 +202,14 @@ class SolaxAdapter:
                         _press(e.apply), _press(e.trigger)]
             self.last_main, self.last_modbus = "Disabled", "Disabled"
             if not self.mode8_active or changed or watchdog:
-                out += [_sel(e.select_mode8, submode), _num(e.duration_mode8, MODE8_DURATION_S),
-                        _num(e.autorepeat, MODE8_AUTOREPEAT_S), _press(e.trigger_mode8)]
+                out += [_sel(e.select_mode8, submode)]
+                if grid8:
+                    out += [_num(e.push8, push)]
+                    self.last_push, self.last_slot = push, slot
+                out += [_num(e.duration_mode8, MODE8_DURATION_S), _num(e.autorepeat, MODE8_AUTOREPEAT_S),
+                        _press(e.trigger_mode8)]
+            if not grid8:
+                self.last_push = None
             self.mode8_active, self.mode8_submode = True, submode
         elif self.mode8_active:
             if mode1_active:

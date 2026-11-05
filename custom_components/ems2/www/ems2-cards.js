@@ -8,7 +8,7 @@
  * jako v EMS, na velikosti a háčcích nezáleží), title.
  */
 (() => {
-  const VER = "2.0.35";
+  const VER = "2.0.36";
   const ICONS = { pracka: "🫧", susicka: "🌀", mycka: "🍽️", auto: "🚗", wall: "🚗", bazen: "🏊" };
   const pad = (n) => String(n).padStart(2, "0");
   const fmtTime = (iso) => { if (!iso) return ""; const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };

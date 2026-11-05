@@ -21,7 +21,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from .api import EmsApi, EmsApiError, EmsAuthError
-from .const import (ACCOUNTING_INTERVAL_S, CELLS_INTERVAL_S, BUFFER_MAX, CONF_BATTERY_INVERT, CONF_CONTROL, CONF_ENTITIES, CONF_GRID_INVERT,
+from .const import (ACCOUNTING_INTERVAL_S, CONF_MODE8_GRID, CELLS_INTERVAL_S, BUFFER_MAX, CONF_BATTERY_INVERT, CONF_CONTROL, CONF_ENTITIES, CONF_GRID_INVERT,
                     CONF_PREFIX, CONF_URL, CONTROL_NONE, CONTROL_WATCH, server_tag, DEFAULT_PREFIX, DOMAIN, INFO_INTERVAL_S, OFFLINE_FALLBACK_S,
                     TELEMETRY_DEFAULTS, UPDATE_INTERVAL_S)
 from . import heating, switching
@@ -47,7 +47,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         self.entities.update({k: v for k, v in (opts.get(CONF_ENTITIES) or {}).items() if v})
         self.grid_invert = bool(opts.get(CONF_GRID_INVERT, False))
         self.battery_invert = bool(opts.get(CONF_BATTERY_INVERT, False))
-        self.adapter = SolaxAdapter(SolaxEntities(prefix))
+        self.adapter = SolaxAdapter(SolaxEntities(prefix), mode8_grid=bool(opts.get(CONF_MODE8_GRID, False)))
         self.buffer: deque[dict] = deque(maxlen=BUFFER_MAX)
         self.last_ok: float | None = None
         self.connected = False

@@ -19,6 +19,7 @@ CONTROL_NONE = "none"
 # druhá instance stejného domu na jiném serveru (beta): posílá stejná měření, ale NIC neovládá
 CONTROL_WATCH = "watch"
 # monitor článků baterie (Solax T58 přes převodník RS-485 → Ethernet), viz t58.py
+CONF_MODE8_GRID = "mode8_grid"     # zkušební: nabíjení a prodej ze sítě přes Mode 8/9 „Enabled Grid Control“ místo Mode 1
 CONF_T58_HOST = "t58_host"
 CONF_T58_PORT = "t58_port"
 CONF_T58_PER_PACK = "t58_per_pack"

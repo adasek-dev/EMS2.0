@@ -104,7 +104,11 @@
               "grid_invert": "Obrátit znaménko výkonu sítě",
               "battery_invert": "Obrátit znaménko baterie (když + znamená vybíjení)",
               "prefix": "Prefix entit SolaX",
-              "inverter_state": "Stav střídače (run mode)"
+              "inverter_state": "Stav střídače (run mode)",
+              "mode8_grid": "Grid charging and selling via Mode 8/9 (experimental)"
+            },
+            "data_description": {
+              "mode8_grid": "Uses Mode 8/9 “Enabled Grid Control” instead of Mode 1. Recent SolaX firmware only."
             }
           },
           "t58": {
