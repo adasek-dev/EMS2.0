@@ -127,6 +127,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         entry.async_on_unload(_stop)
 
     events_ok: bool = False
+    events_error: str | None = None
     _quick: asyncio.Task | None = None
     _quick_again: bool = False
 
@@ -152,9 +153,16 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         self._quick = self.hass.async_create_background_task(run(), "ems2_quick_refresh")
 
     def _events_open(self) -> None:
-        self.events_ok = True
+        self.events_ok, self.events_error = True, None
         _LOGGER.debug("EMS 2.0: události ze serveru připojeny")
         self.quick_refresh()                               # po (znovu)připojení nic nezmeškat
+
+    def _events_fail(self, why: str) -> None:
+        was = self.events_ok
+        self.events_ok, self.events_error = False, why
+        _LOGGER.debug("EMS 2.0: události ze serveru: %s", why)
+        if was and self.data is not None:              # atribut v HA ukáže důvod hned, ne až s další obnovou
+            self.async_set_updated_data(self.snapshot())
 
     async def _events_loop(self) -> None:
         delay = 3
@@ -166,13 +174,17 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
                 self.events_ok = False
                 raise
             except EmsApiError as e:
-                if e.status in (404, 405):                 # starší server – zkusit zase za hodinu
-                    await asyncio.sleep(3600)
+                if e.status in (404, 405):                 # starší server – zkusit zase za 5 minut
+                    self._events_fail("server okamžité změny neumí (starší verze)")
+                    await asyncio.sleep(300)
                     continue
-                _LOGGER.debug("EMS 2.0: události ze serveru: %s", e)
+                self._events_fail(e.message if e.status else str(e))
+            except asyncio.TimeoutError:
+                self._events_fail("server neodpovídá (proxy drží odpověď? – viz README, Nginx Proxy Manager)")
             except Exception as e:                         # noqa: BLE001 – spadlé spojení, restart API, proxy…
-                _LOGGER.debug("EMS 2.0: události ze serveru: %s", e)
-            self.events_ok = False
+                self._events_fail(str(e) or type(e).__name__)
+            else:
+                self._events_fail("spojení ukončeno")
             if time.monotonic() - t0 > 60:
                 delay = 3                                  # spojení chvíli drželo → znovu hned
             await asyncio.sleep(delay)
@@ -466,6 +478,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         return {"command": self.command, "applied": self.applied, "info": self.info, "settings": self.settings,
                 "plan": self.plan, "accounting": self.accounting, "connected": self.connected,
                 "last_error": self.last_error, "buffered": len(self.buffer), "events_ok": self.events_ok,
+                "events_error": self.events_error,
                 "advice": (self.command or {}).get("advice"), "advice_only": self.advice_only,
                 "billing": self.billing}
 
