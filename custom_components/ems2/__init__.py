@@ -149,6 +149,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coord.async_config_entry_first_refresh()
     entry.runtime_data = coord
     coord.t58 = _t58_start(hass, entry)        # po prvním spojení se serverem – ví se, jestli má dům Premium
+    coord.start_events(entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_reload))
     return True

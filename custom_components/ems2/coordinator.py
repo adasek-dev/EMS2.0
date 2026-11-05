@@ -8,6 +8,7 @@ Bezpečnost:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections import deque
@@ -116,6 +117,38 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         self.async_update_listeners()
 
     # ── hlavní smyčka ────────────────────────────────────────────
+    # ── okamžité změny ze serveru (server-sent events) ─────────────
+    def start_events(self, entry) -> None:
+        """Server dá vědět, když se u domu něco změní (naplánovaný spotřebič, nový plán…) → povel hned,
+        ne až v dalším cyklu. Když spojení nejde, jede dál pravidelný cyklus po 5 s."""
+        task = self.hass.async_create_background_task(self._events_loop(), "ems2_events")
+        def _stop() -> None:
+            task.cancel()
+        entry.async_on_unload(_stop)
+
+    def _on_change(self) -> None:
+        self.hass.async_create_task(self.async_request_refresh())
+
+    async def _events_loop(self) -> None:
+        delay = 3
+        while True:
+            t0 = time.monotonic()
+            try:
+                await self.api.events(self._on_change)
+            except asyncio.CancelledError:
+                raise
+            except EmsApiError as e:
+                if e.status in (404, 405):                 # starší server – zkusit zase za hodinu
+                    await asyncio.sleep(3600)
+                    continue
+                _LOGGER.debug("EMS 2.0: události ze serveru: %s", e)
+            except Exception as e:                         # noqa: BLE001 – spadlé spojení, restart API, proxy…
+                _LOGGER.debug("EMS 2.0: události ze serveru: %s", e)
+            if time.monotonic() - t0 > 60:
+                delay = 3                                  # spojení chvíli drželo → znovu hned
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 120)
+
     async def _async_update_data(self) -> dict:
         now = dt_util.utcnow()
         sample = build_sample(self._get_state, self.entities, now.strftime("%Y-%m-%dT%H:%M:%SZ"),

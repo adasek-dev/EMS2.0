@@ -50,6 +50,18 @@ class EmsApi:
     def _site(self, sub: str) -> str:
         return f"/sites/{self.site_id}{sub}"
 
+    async def events(self, on_change) -> None:
+        """Server-sent events: na každou „change“ zavolá on_change(). Vrátí se, když spojení skončí.
+        EmsApiError(404) = server je starší a události neumí."""
+        url = f"{self.url}/api/v1{self._site('/events')}"
+        timeout = aiohttp.ClientTimeout(total=None, connect=15, sock_read=90)      # server posílá ping každých 25 s
+        async with self._s.get(url, headers={**self._headers, "Accept": "text/event-stream"}, timeout=timeout) as r:
+            if r.status >= 400:
+                raise (EmsAuthError if r.status == 401 else EmsApiError)(r.status, "události nejdou")
+            async for line in r.content:
+                if line.startswith(b"event: change"):
+                    on_change()
+
     async def whoami(self) -> dict:
         return await self._req("GET", self._site("/whoami"))
 
