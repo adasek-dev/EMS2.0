@@ -201,6 +201,24 @@
           "description": "Only this site."
         }
       }
+    },
+    "appliance_then": {
+      "name": "Run another appliance after",
+      "description": "Adds a follow-up run (e.g. dryer after washer) to the running or next planned run, same window; empty = remove the follow-up.",
+      "fields": {
+        "appliance": {
+          "name": "Appliance",
+          "description": "Name or id."
+        },
+        "then": {
+          "name": "Then run",
+          "description": "Name or id of the follow-up appliance; empty or \"nic\" = remove."
+        },
+        "entry_id": {
+          "name": "Site",
+          "description": "Only this site."
+        }
+      }
     }
   }
 }

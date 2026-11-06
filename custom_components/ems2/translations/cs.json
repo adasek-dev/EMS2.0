@@ -201,6 +201,24 @@
           "description": "Jen pro tento dům."
         }
       }
+    },
+    "appliance_then": {
+      "name": "Po běhu spustit jiný spotřebič",
+      "description": "K běžícímu nebo dalšímu naplánovanému běhu přidá navazující běh (např. sušičku po pračce) se stejným oknem; prázdné = navazující běh zrušit.",
+      "fields": {
+        "appliance": {
+          "name": "Spotřebič",
+          "description": "Název nebo id spotřebiče."
+        },
+        "then": {
+          "name": "Po něm spustit",
+          "description": "Název nebo id navazujícího spotřebiče; prázdné nebo „nic“ = zrušit."
+        },
+        "entry_id": {
+          "name": "Dům",
+          "description": "Jen pro tento dům."
+        }
+      }
     }
   }
 }

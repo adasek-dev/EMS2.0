@@ -32,6 +32,8 @@ PLAN_APPLIANCE_SCHEMA = vol.Schema({
     vol.Optional("earliest"): cv.datetime, vol.Optional("deadline"): cv.datetime, vol.Optional("then"): cv.string,
     vol.Optional("kwh"): vol.Coerce(float), vol.Optional("entry_id"): cv.string})
 CANCEL_APPLIANCE_SCHEMA = vol.Schema({vol.Required("appliance"): cv.string, vol.Optional("entry_id"): cv.string})
+THEN_APPLIANCE_SCHEMA = vol.Schema({vol.Required("appliance"): cv.string, vol.Optional("then", default=""): cv.string,
+                                    vol.Optional("entry_id"): cv.string})
 
 
 def _iso(v):
@@ -149,8 +151,21 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             except EmsApiError as e:
                 raise HomeAssistantError(f"EMS 2.0: {e.message}") from e
 
+    async def appliance_then(call: ServiceCall) -> None:
+        """Po běžícím / dalším běhu spustit jiný spotřebič (sušičku po pračce); prázdné = nic."""
+        body = {"action": "then", "appliance": call.data["appliance"], "then": call.data.get("then") or ""}
+        for coord in _coordinators(hass, call.data.get("entry_id")):
+            if coord.watch and not call.data.get("entry_id"):
+                continue
+            try:
+                await coord.api.jobs(body)
+            except EmsApiError as e:
+                raise HomeAssistantError(f"EMS 2.0: {e.message}") from e
+            coord.quick_refresh(0.1)
+
     _register_ws(hass)
     hass.services.async_register(DOMAIN, "plan_appliance", plan_appliance, schema=PLAN_APPLIANCE_SCHEMA)
+    hass.services.async_register(DOMAIN, "appliance_then", appliance_then, schema=THEN_APPLIANCE_SCHEMA)
     hass.services.async_register(DOMAIN, "cancel_appliance", cancel_appliance, schema=CANCEL_APPLIANCE_SCHEMA)
     hass.services.async_register(DOMAIN, "set_tariff", set_tariff, schema=SET_TARIFF_SCHEMA)
     hass.services.async_register(DOMAIN, "replan", replan, schema=REPLAN_SCHEMA)

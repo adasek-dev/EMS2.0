@@ -71,3 +71,20 @@ cancel_appliance:
       selector:
         config_entry:
           integration: ems2
+appliance_then:
+  fields:
+    appliance:
+      required: true
+      example: "Pračka"
+      selector:
+        text:
+    then:
+      required: false
+      example: "Sušička"
+      selector:
+        text:
+    entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: ems2

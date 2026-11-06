@@ -8,7 +8,7 @@
  * jako v EMS, na velikosti a háčcích nezáleží), title.
  */
 (() => {
-  const VER = "2.0.36";
+  const VER = "2.0.37";
   const ICONS = { pracka: "🫧", susicka: "🌀", mycka: "🍽️", auto: "🚗", wall: "🚗", bazen: "🏊" };
   const pad = (n) => String(n).padStart(2, "0");
   const fmtTime = (iso) => { if (!iso) return ""; const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
@@ -82,7 +82,7 @@
         "datetime:od", "datetime:do", "number:kolikrat", "select:potom"].map((k) => {
         const [dom, key] = k.split(":"); const s = this._st(a, dom, key);
         return s ? [s.state, s.attributes.schedule ? s.attributes.schedule.length : 0, s.attributes.alternatives ? JSON.stringify(s.attributes.alternatives) : "", (s.attributes.options || []).join(","), s.attributes.planned_kc == null ? "" : s.attributes.planned_kc,
-          s.attributes.next_provisional ? 1 : 0, s.attributes.next_id || "", s.attributes.waiting || 0, s.attributes.today || 0] : null;
+          s.attributes.next_provisional ? 1 : 0, s.attributes.next_id || "", s.attributes.next_then || "", s.attributes.then_job || "", s.attributes.waiting || 0, s.attributes.today || 0] : null;
       })).concat(Object.entries(this._alt || {})));
     }
 
@@ -111,6 +111,15 @@
       const html = apps.map((a) => this._appHtml(a)).join("");
       this.shadowRoot.innerHTML = `${STYLE}${title ? `<div class="title">${esc(title)}</div>` : ""}<div class="grid">${html}</div>`;
       this._bind(apps);
+    }
+
+    async _setThen(a, name) {
+      this._thenBusy = this._thenBusy || {}; this._thenOpen = this._thenOpen || {};
+      this._thenBusy[a.id] = { name, until: Date.now() + 60000 }; this._thenOpen[a.id] = false;
+      this._sig = null; this._render();
+      try { await this._call("ems2", "appliance_then", { appliance: a.id, then: name }); }
+      catch (e) { delete this._thenBusy[a.id]; this._sig = null; this._render(); }
+      clearTimeout(this._thenT); this._thenT = setTimeout(() => { this._sig = null; this._render(); }, 61000);
     }
 
     _appHtml(a) {
@@ -142,12 +151,23 @@
         : (next && next.state && next.state !== "unknown" && next.state !== "unavailable") ? `<span class="pill${at.next_provisional ? " prov" : ""}" title="${at.next_provisional ? "Předběžně podle rady – celý plán ho za chvíli potvrdí nebo posune" : ""}">další ${dayWord(next.state)} ${fmtTime(next.state)}${at.next_provisional ? " · předběžně" : ""}</span>`
         : `<span class="pill idle">nic naplánováno</span>`;
       const opts = then ? (then.attributes.options || []) : [];
+      // navazující běh k už naplánovanému (sušička po pračce): po uložení „Plánuji…“, dokud ho server neukáže
+      this._thenBusy = this._thenBusy || {};
+      const tb = this._thenBusy[a.id];
+      if (tb && ((at.next_then || "") === tb.name || Date.now() > tb.until)) delete this._thenBusy[a.id];
+      const tbNow = this._thenBusy[a.id];
+      const thenOpts = opts.slice(1).filter((o) => o !== name);
+      const thenRow = tbNow ? `<div class="then">${tbNow.name ? `Plánuji ${esc(tbNow.name)}…` : "Ruším navazující…"}</div>`
+        : at.next_then ? `<div class="then">↳ po něm: <b>${esc(at.next_then)}</b> <button class="link x" data-act="then-off" title="Zrušit navazující běh">✕</button></div>`
+        : (at.then_job && thenOpts.length) ? (this._thenOpen && this._thenOpen[a.id]
+          ? `<div class="then"><select data-f="then-now"><option value="">po něm spustit…</option>${thenOpts.map((o) => `<option>${esc(o)}</option>`).join("")}</select> <button class="link" data-act="then-close">zrušit</button></div>`
+          : `<div class="then"><button class="link" data-act="then-open">+ po něm…</button></div>`) : "";
       return `
       <ha-card class="app" data-app="${a.id}">
         <div class="head"><span class="ic">${icon}</span><div><div class="nm">${esc(name)}</div>
           <div class="sub">${at.nominal_w ? (at.nominal_w / 1000).toLocaleString("cs-CZ", { maximumFractionDigits: 1 }) + " kW · " : ""}${at.minutes ? (at.minutes / 60).toLocaleString("cs-CZ", { maximumFractionDigits: 1 }) + " h · " : ""}${at.control ? "spíná EMS" : "připomene"}</div></div>${pill}</div>
         <div class="stat">
-          <div><span>Další běh</span><b>${next && next.state && next.state !== "unknown" && next.state !== "unavailable" ? `${dayWord(next.state)} ${fmtTime(next.state)}${(next.attributes || {}).next_end ? "–" + fmtTime(next.attributes.next_end) : ""}` : "–"}</b></div>
+          <div><span>Další běh</span><b>${next && next.state && next.state !== "unknown" && next.state !== "unavailable" ? `${dayWord(next.state)} ${fmtTime(next.state)}${(next.attributes || {}).next_end ? "–" + fmtTime(next.attributes.next_end) : ""}` : "–"}</b>${thenRow}</div>
           <div><span>Dnes hotovo</span><b>${today && today.state !== "unknown" ? esc(today.state) : "–"}</b></div>
         </div>
         ${al ? `<div class="best${at.planned_kc != null ? " two" : ""}"><div class="bl"><div>💡 <b>${bestTxt}</b><small>${bestSub}</small></div>
@@ -177,6 +197,7 @@
           const f = inp.dataset.f;
           if (f.startsWith("od")) setDT("od", '[data-f="od-d"]', '[data-f="od-t"]');
           else if (f.startsWith("do")) setDT("do", '[data-f="do-d"]', '[data-f="do-t"]');
+          else if (f === "then-now") { if (inp.value) this._setThen(a, inp.value); }
           else if (f === "then") this._call("select", "select_option", { entity_id: this._e(a, "select", "potom"), option: inp.value });
         }));
         el.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", async () => {
@@ -190,6 +211,10 @@
             this._startBusy(a, [v('[data-f="od-d"]'), v('[data-f="od-t"]'), v('[data-f="do-d"]'), v('[data-f="do-t"]')]);
             try { await this._call("button", "press", { entity_id: this._e(a, "button", "naplanovat") }); this._sentBusy(a); }
             catch (e) { delete this._busy[a.id]; this._sig = null; this._render(); }
+          } else if (act === "then-open" || act === "then-close") {
+            this._thenOpen = this._thenOpen || {}; this._thenOpen[a.id] = act === "then-open"; this._sig = null; this._render();
+          } else if (act === "then-off") {
+            this._setThen(a, "");
           } else if (act === "cancel") {
             await this._call("button", "press", { entity_id: this._e(a, "button", "zrusit") });
           } else if (act === "other") {
@@ -243,6 +268,9 @@
     .best .pl { border-left: 1px solid var(--divider-color, rgba(127,127,127,.25)); padding-left: 12px; text-align: right; min-width: 118px; }
     .best .pl span { display: block; font-size: 11px; color: var(--secondary-text-color); }
     .best .pl b { display: block; font-size: 18px; font-weight: 600; margin: 1px 0; }
+    .then { font-size: 12px; color: var(--secondary-text-color); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+    .then b { font-size: 12px; font-weight: 600; } .then .link { font-size: 12px; } .then .x { padding: 0 4px; }
+    .then select { font-size: 13px; padding: 4px 6px; }
     .link { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--primary-color); cursor: pointer; }
     .form { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin-bottom: 12px; }
     .form label { font-size: 12px; color: var(--secondary-text-color); margin-top: 6px; }
