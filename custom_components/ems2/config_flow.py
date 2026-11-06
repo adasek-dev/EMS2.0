@@ -45,7 +45,10 @@ class Ems2ConfigFlow(ConfigFlow, domain=DOMAIN):
             if err:
                 errors["base"] = err
             else:
-                same = [e for e in self._async_current_entries() if e.data.get(CONF_SITE_ID) == info["site_id"]]
+                # druhá instance (beta) jen sleduje – ale jen když už je řídicí připojení stejného domu;
+                # když jsou v HA jen sledující (ostrá smazaná a přidaná znovu), nové je řídicí
+                same = [e for e in self._async_current_entries() if e.data.get(CONF_SITE_ID) == info["site_id"]
+                        and {**e.data, **e.options}.get(CONF_CONTROL) != CONTROL_WATCH]
                 if same and all(e.data.get(CONF_URL, "").rstrip("/") != user_input[CONF_URL].rstrip("/") for e in same):
                     # stejný dům na jiném serveru (beta): jen sledovat – stejná měření jako hlavní instance, nic neovládat
                     await self.async_set_unique_id(f"{info['site_id']}@{server_tag(user_input[CONF_URL])}")
