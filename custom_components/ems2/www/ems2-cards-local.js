@@ -18,7 +18,21 @@
     const k = Math.round((a - b) / 86400000);
     return k === 0 ? "dnes" : k === 1 ? "zítra" : k === -1 ? "včera" : `${d.getDate()}. ${d.getMonth() + 1}.`;
   };
-  const kc = (v) => (v == null ? "" : Number(v).toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " Kč");
+  // měna domu: podle jednotky cenových senzorů EMS (CZK/kWh, EUR/kWh, PLN/kWh)
+  let CUR = "Kč";
+  const SYM = { CZK: "Kč", EUR: "€", PLN: "zł" };
+  let curAt = 0;
+  const findCur = (h) => {
+    if (Date.now() - curAt < 60000) return CUR;           // stačí jednou za minutu
+    curAt = Date.now();
+    for (const k in h.states) {
+      if (!k.startsWith("sensor.ems2")) continue;
+      const m = /^(CZK|EUR|PLN)\/kWh$/.exec(((h.states[k] || {}).attributes || {}).unit_of_measurement || "");
+      if (m) return SYM[m[1]];
+    }
+    return CUR;
+  };
+  const kc = (v) => (v == null ? "" : Number(v).toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + CUR);
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   class Ems2AppliancesCard extends HTMLElement {
@@ -27,6 +41,7 @@
     getCardSize() { return 6 * Math.max(1, (this._apps || []).length); }
     getGridOptions() { return { columns: "full", rows: "auto", min_columns: 6 }; }   // sekce: přes celou šířku → spotřebiče vedle sebe
     set hass(hass) {
+      CUR = findCur(hass);
       this._hass = hass;
       const sig = this._signature();
       if (sig !== this._sig) { this._sig = sig; this._render(); }

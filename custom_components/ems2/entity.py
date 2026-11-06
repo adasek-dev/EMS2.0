@@ -90,6 +90,12 @@ class Ems2Entity(CoordinatorEntity[Ems2Coordinator]):
     def d(self) -> dict:
         return self.coordinator.data or {}
 
+    @property
+    def cur(self) -> str:
+        """Měna domu ze serveru (CZK, EUR, PLN) – starší server ji neposílá → CZK."""
+        d = self.d
+        return (d.get("command") or {}).get("currency") or (d.get("advice") or {}).get("currency") or "CZK"
+
 
 def track_jobs(c, entry, add, make) -> None:
     """Entity pro spotřebiče s plánem: vytvoří je pro známé spotřebiče a doplní nové, jak se objeví v doporučení."""

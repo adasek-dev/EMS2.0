@@ -82,13 +82,16 @@ class ModeNow(Ems2Entity, SensorEntity):
 
 
 class Price(Ems2Entity, SensorEntity):
-    _attr_native_unit_of_measurement = "CZK/kWh"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 2
 
     def __init__(self, c, key, name, field):
         super().__init__(c, key, name, "mdi:cash")
         self._field = field
+
+    @property
+    def native_unit_of_measurement(self):
+        return f"{self.cur}/kWh"
 
     @property
     def native_value(self):
@@ -119,7 +122,10 @@ class PlanSensor(Ems2Entity, SensorEntity):
 
 
 class PlanCost(Ems2Entity, SensorEntity):
-    _attr_native_unit_of_measurement = "CZK"
+
+    @property
+    def native_unit_of_measurement(self):
+        return self.cur
     _attr_suggested_display_precision = 2
 
     def __init__(self, c, day):
@@ -134,7 +140,10 @@ class PlanCost(Ems2Entity, SensorEntity):
 
 
 class Accounting(Ems2Entity, SensorEntity):
-    _attr_native_unit_of_measurement = "CZK"
+
+    @property
+    def native_unit_of_measurement(self):
+        return self.cur
     _attr_suggested_display_precision = 2
 
     def __init__(self, c, field, key, name):
@@ -314,7 +323,10 @@ class AdviceEnergy(_Advice):
 
 class Billing(Ems2Entity, SensorEntity):
     """Odhad vyúčtování na konci zúčtovacího období: + přeplatek, − nedoplatek (Kč)."""
-    _attr_native_unit_of_measurement = "CZK"
+
+    @property
+    def native_unit_of_measurement(self):
+        return self.cur
     _attr_suggested_display_precision = 0
 
     def __init__(self, c):

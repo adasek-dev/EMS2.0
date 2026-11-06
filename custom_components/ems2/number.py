@@ -31,6 +31,13 @@ class SettingNumber(Ems2Entity, NumberEntity):
         self._attr_native_unit_of_measurement = unit
 
     @property
+    def native_unit_of_measurement(self):
+        u = self._attr_native_unit_of_measurement
+        if u and "Kč" in u:                       # částky v měně domu
+            u = u.replace("Kč", {"EUR": "€", "PLN": "zł"}.get(self.cur, "Kč"))
+        return u
+
+    @property
     def available(self) -> bool:
         return super().available and self._key in (self.d.get("settings") or {})
 
