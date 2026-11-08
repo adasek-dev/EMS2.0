@@ -196,6 +196,10 @@
           "name": "Appliance",
           "description": "Name or id."
         },
+        "job": {
+          "name": "Run",
+          "description": "Id of a specific run to cancel (the card's ✕). Empty = the nearest run."
+        },
         "entry_id": {
           "name": "Site",
           "description": "Only this site."

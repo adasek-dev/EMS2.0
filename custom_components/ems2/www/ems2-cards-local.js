@@ -8,7 +8,7 @@
  * jako v EMS, na velikosti a háčcích nezáleží), title.
  */
 (() => {
-  const VER = "2.0.37.2";
+  const VER = "2.0.39.2";
   const ICONS = { pracka: "🫧", susicka: "🌀", mycka: "🍽️", auto: "🚗", wall: "🚗", bazen: "🏊" };
   const pad = (n) => String(n).padStart(2, "0");
   const fmtTime = (iso) => { if (!iso) return ""; const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
@@ -44,7 +44,23 @@
       CUR = findCur(hass);
       this._hass = hass;
       const sig = this._signature();
-      if (sig !== this._sig) { this._sig = sig; this._render(); }
+      if (sig === this._sig && !this._pend) return;
+      // během psaní do pole (čas, datum, výběr) ani při kliknutí kartu nepřekreslovat – jinak pole ztratí výběr
+      // a čas by šlo zadat jen po jedné číslici; překreslí se, až uživatel pole opustí
+      if (this._editing()) { this._pend = true; return; }
+      this._pend = false; this._sig = sig; this._render();
+    }
+    _editing() {
+      if (this._down) return true;
+      const a = this.shadowRoot && this.shadowRoot.activeElement;
+      return !!(a && /^(INPUT|SELECT)$/.test(a.tagName));
+    }
+    _later() {
+      clearTimeout(this._laterT);
+      this._laterT = setTimeout(() => {
+        if (this._editing()) return;
+        if (this._pend && this._hass) { this._pend = false; this._sig = this._signature(); this._render(); }
+      }, 400);
     }
 
     _appliances() {
@@ -82,14 +98,24 @@
         "datetime:od", "datetime:do", "number:kolikrat", "select:potom"].map((k) => {
         const [dom, key] = k.split(":"); const s = this._st(a, dom, key);
         return s ? [s.state, s.attributes.schedule ? s.attributes.schedule.length : 0, s.attributes.alternatives ? JSON.stringify(s.attributes.alternatives) : "", (s.attributes.options || []).join(","), s.attributes.planned_kc == null ? "" : s.attributes.planned_kc,
-          s.attributes.next_provisional ? 1 : 0, s.attributes.next_id || "", s.attributes.next_then || "", s.attributes.then_job || "", s.attributes.waiting || 0, s.attributes.today || 0] : null;
+          s.attributes.next_provisional ? 1 : 0, s.attributes.next_id || "", s.attributes.next_then || "", s.attributes.then_job || "", s.attributes.waiting || 0, s.attributes.today || 0, s.attributes.runs ? JSON.stringify(s.attributes.runs) : ""] : null;
       })).concat(Object.entries(this._alt || {})));
     }
 
     _call(domain, service, data) { return this._hass.callService(domain, service, data); }
+    _flushDraft(id, key) {
+      const dr = this._draft && this._draft[id]; if (!dr || !dr.dirty || !dr.dirty[key]) return;
+      const a = (this._apps || []).find((x) => x.id === id); if (!a) return;
+      const [d, t] = key === "od" ? dr.vals.slice(0, 2) : dr.vals.slice(2, 4);
+      if (!d || !t) return;
+      delete dr.dirty[key];
+      this._call("datetime", "set_value", { entity_id: this._e(a, "datetime", key), datetime: `${d} ${t}:00` }).catch(() => {});
+    }
     _startBusy(a, vals) {
       const p = this._st(a, "sensor", "vykon");
-      this._busy[a.id] = { vals, snap: JSON.stringify((p && p.attributes) || {}), sent: false, until: Date.now() + 90000 };
+      const at = (p && p.attributes) || {};
+      this._busy[a.id] = { vals, snap: JSON.stringify(at), sent: false, until: Date.now() + 90000,
+        runs: (at.runs || []).map((r) => r.id), waiting: at.waiting || 0 };
       this._sig = null; this._render();
     }
     _sentBusy(a) {
@@ -100,7 +126,23 @@
     }
 
     _render() {
-      if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+      if (!this.shadowRoot) {
+        this.attachShadow({ mode: "open" });
+        // posluchače jednou na celý shadow root (obsah se překresluje)
+        this.shadowRoot.addEventListener("pointerdown", () => { this._down = true; });
+        const up = () => { this._down = false; this._later(); };
+        this.shadowRoot.addEventListener("pointerup", up);
+        this.shadowRoot.addEventListener("pointercancel", up);
+        this.shadowRoot.addEventListener("focusout", (ev) => {
+          const t = ev.target, el = t && t.closest && t.closest("[data-app]");
+          // čas a datum se do HA pošlou, až pole opustí (ne po každé číslici)
+          if (el && t.dataset && /^(od|do)-/.test(t.dataset.f || "")) {
+            const nxt = ev.relatedTarget;
+            if (!(nxt && nxt.closest && nxt.closest(".dt") && nxt.closest(".dt") === t.closest(".dt"))) this._flushDraft(el.dataset.app, t.dataset.f.slice(0, 2));
+          }
+          this._later();
+        });
+      }
       if (!this._hass) { this.shadowRoot.innerHTML = ""; return; }
       const apps = this._apps = this._appliances();
       const title = this._config.title;
@@ -119,9 +161,7 @@
       this._sig = null; this._render();
       const pa = (this._st(a, "sensor", "vykon") || {}).attributes || {};
       // které připojení (ostrá / beta) entitu vlastní – bez entry_id by služba šla jen na řídicí připojení
-      const ent = (this._hass.entities || {})[this._e(a, "sensor", "vykon")];
-      const dev = ent && ent.device_id && (this._hass.devices || {})[ent.device_id];
-      const entry = dev && (dev.config_entries || [])[0];
+      const entry = this._entry(a);
       const data = { appliance: pa.name || a.id, then: name };
       if (entry) data.entry_id = entry;
       try { await this._call("ems2", "appliance_then", data); }
@@ -140,9 +180,26 @@
       const canPlan = !!(dd && this._st(a, "button", "naplanovat"));
       const split = (s) => { if (!s || !s.state || s.state === "unknown" || s.state === "unavailable") return ["", ""]; const d = new Date(s.state.replace(" ", "T")); return [`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, `${pad(d.getHours())}:${pad(d.getMinutes())}`]; };
       let [odD, odT] = split(od), [doD, doT] = split(dd);
+      // rozepsané časy (ještě neodeslané do HA) mají přednost, dokud HA neukáže stejné hodnoty
+      this._draft = this._draft || {};
+      const dr = this._draft[a.id];
+      if (dr) {
+        if (Date.now() > dr.until || (dr.vals[0] === odD && dr.vals[1] === odT && dr.vals[2] === doD && dr.vals[3] === doT)) delete this._draft[a.id];
+        else [odD, odT, doD, doT] = dr.vals;
+      }
       // po „Naplánovat“: dokud server běh nezařadí, držet zadané časy a „Plánuji…“ (formulář v HA se mezitím vrátí na výchozí)
       const busy = this._busy && this._busy[a.id];
-      if (busy && (busy.sent && JSON.stringify(at) !== busy.snap || Date.now() > busy.until)) delete this._busy[a.id];
+      if (busy && (busy.sent && JSON.stringify(at) !== busy.snap || Date.now() > busy.until)) {
+        // server běh zařadil: na chvíli ukázat, co přibylo („✓ Naplánováno…“ a štítek „nový“)
+        if (busy.sent) {
+          const added = (at.runs || []).filter((r) => !(busy.runs || []).includes(r.id));
+          this._fresh = this._fresh || {};
+          this._fresh[a.id] = { ids: added.map((r) => r.id), runs: added, waiting: (at.waiting || 0) > (busy.waiting || 0),
+            until: Date.now() + 10000 };
+          clearTimeout(this._freshT); this._freshT = setTimeout(() => { this._sig = null; this._render(); }, 10100);
+        }
+        delete this._busy[a.id];
+      }
       else if (busy) [odD, odT, doD, doT] = busy.vals;
       const planning = !!(this._busy && this._busy[a.id]);
       // rádce: nejlevnější termín a další (tlačítko „jiný termín“ jimi prochází)
@@ -172,14 +229,12 @@
       return `
       <ha-card class="app" data-app="${a.id}">
         <div class="head"><span class="ic">${icon}</span><div><div class="nm">${esc(name)}</div>
-          <div class="sub">${at.nominal_w ? (at.nominal_w / 1000).toLocaleString("cs-CZ", { maximumFractionDigits: 1 }) + " kW · " : ""}${at.minutes ? (at.minutes / 60).toLocaleString("cs-CZ", { maximumFractionDigits: 1 }) + " h · " : ""}${at.control ? "spíná EMS" : "připomene"}</div></div>${pill}</div>
-        <div class="stat">
-          <div><span>Další běh</span><b>${next && next.state && next.state !== "unknown" && next.state !== "unavailable" ? `${dayWord(next.state)} ${fmtTime(next.state)}${(next.attributes || {}).next_end ? "–" + fmtTime(next.attributes.next_end) : ""}` : "–"}</b>${thenRow}</div>
-          <div><span>Dnes hotovo</span><b>${today && today.state !== "unknown" ? esc(today.state) : "–"}</b></div>
-        </div>
+          <div class="sub">${at.nominal_w ? (at.nominal_w / 1000).toLocaleString("cs-CZ", { maximumFractionDigits: 1 }) + " kW · " : ""}${at.minutes ? (at.minutes / 60).toLocaleString("cs-CZ", { maximumFractionDigits: 1 }) + " h · " : ""}${at.control ? "spíná EMS" : "připomene"}${today && today.state && today.state !== "unknown" && today.state !== "unavailable" ? ` · dnes hotovo ${esc(today.state)}` : ""}</div></div>${pill}</div>
+        ${this._runsHtml(a, at, next, thenRow)}
         ${al ? `<div class="best${at.planned_kc != null ? " two" : ""}"><div class="bl"><div>💡 <b>${bestTxt}</b><small>${bestSub}</small></div>
           <div class="best-act">${canPlan ? `<button class="link" data-act="here">Naplánovat sem</button>` : ""}${alts.length > 1 ? `<button class="link" data-act="other">jiný termín ›</button>` : ""}</div></div>
           ${at.planned_kc != null ? `<div class="pl"><span>${runNow ? "Běh teď" : "Naplánovaný běh"}</span><b>≈ ${kc(at.planned_kc)}</b><small>${alts.length ? (at.planned_kc < alts[0].kc - 0.05 ? `o ${kc(alts[0].kc - at.planned_kc)} míň – FVE / baterie` : at.planned_kc <= alts[0].kc + 0.05 ? "jako nejlevněji" : `o ${kc(at.planned_kc - alts[0].kc)} víc než nejlevněji`) : ""}</small></div>` : ""}</div>` : ""}
+        ${this._okHtml(a)}
         ${canPlan ? `
         <div class="form">
           <div class="f full"><label>Nejdřív od</label><div class="dt"><input type="date" data-f="od-d" value="${odD}"><input type="time" data-f="od-t" value="${odT}"></div></div>
@@ -191,19 +246,94 @@
       </ha-card>`;
     }
 
+    _runsHtml(a, at, next, thenRow) {
+      const runs = Array.isArray(at.runs) ? at.runs : null;
+      if (!runs) {
+        // starší server bez seznamu běhů: jen další běh
+        const nx = next && next.state && next.state !== "unknown" && next.state !== "unavailable"
+          ? `${dayWord(next.state)} ${fmtTime(next.state)}${(next.attributes || {}).next_end ? "–" + fmtTime(next.attributes.next_end) : ""}` : "–";
+        return `<div class="runs"><div class="hd"><span>Další běh</span></div><div class="run"><div class="t">${nx}</div></div>${thenRow}</div>`;
+      }
+      const fr = this._fresh && this._fresh[a.id] && Date.now() < this._fresh[a.id].until ? this._fresh[a.id].ids : [];
+      const err = this._xErr && this._xErr[a.id] && Date.now() < this._xErr[a.id].until ? this._xErr[a.id].text : "";
+      const xBusy = this._xBusy || {};
+      const end = (r) => { const s0 = new Date(r.start), e0 = new Date(r.end);
+        return e0.getHours() === 0 && e0.getMinutes() === 0 && e0.toDateString() !== s0.toDateString() ? "24:00" : fmtTime(r.end); };
+      const n = runs.length;
+      const word = n === 1 ? "běh" : n >= 2 && n <= 4 ? "běhy" : "běhů";
+      const rows = runs.map((r) => {
+        let sm;
+        if (r.running) {
+          const left = Math.max(0, Math.round((new Date(r.end) - Date.now()) / 60000));
+          sm = `do konce ${left >= 60 ? `${Math.floor(left / 60)} h ${left % 60} min` : `${left} min`}`;
+        } else {
+          const parts = [];
+          if (r.kc != null) parts.push(`≈ ${kc(r.kc)}`);
+          if (r.late && r.deadline) parts.push(`skončí ${Math.round((new Date(r.end) - new Date(r.deadline)) / 60000)} min po „hotovo do“ ${fmtTime(r.deadline)}`);
+          if (r.provisional) parts.push("předběžně");
+          sm = parts.join(" · ");
+        }
+        const isNew = fr.includes(r.id);
+        return `<div class="run${isNew ? " hl" : ""}"><div class="t">${dayWord(r.start)} ${fmtTime(r.start)}–${end(r)}${sm ? `<small>${sm}</small>` : ""}</div>
+          ${isNew ? `<span class="st new">nový</span>` : ""}${r.late && !r.running ? `<span class="st late">po termínu</span>` : ""}
+          ${r.running ? `<span class="st go">● ${at.control ? "běží" : "teď"}</span>`
+            : xBusy[r.id] ? `<span class="st">ruším…</span>` : `<button class="x" data-act="x" data-job="${esc(r.id)}" title="Zrušit tento běh" aria-label="Zrušit tento běh">✕</button>`}</div>`;
+      }).join("");
+      const waiting = at.waiting ? `<div class="run"><div class="t">${at.waiting} ${at.waiting === 1 ? "běh čeká" : "běhy čekají"} na zařazení<small>${esc(at.waiting_why || "zařadí se při přepočtu plánu")}</small></div></div>` : "";
+      return `<div class="runs"><div class="hd"><span>Naplánováno</span><span>${n ? `${n} ${word}` : ""}</span></div>
+        ${rows || (waiting ? "" : `<div class="run"><div class="t">nic naplánováno</div></div>`)}${waiting}
+        ${err ? `<div class="xerr">${esc(err)}</div>` : ""}${thenRow}</div>`;
+    }
+
+    _okHtml(a) {
+      const f = this._fresh && this._fresh[a.id];
+      if (!f || Date.now() >= f.until) return "";
+      const end = (r) => { const s0 = new Date(r.start), e0 = new Date(r.end);
+        return e0.getHours() === 0 && e0.getMinutes() === 0 && e0.toDateString() !== s0.toDateString() ? "24:00" : fmtTime(r.end); };
+      if (f.runs.length) return `<div class="ok">✓ Naplánováno: ${f.runs.map((r) => `${dayWord(r.start)} ${fmtTime(r.start)}–${end(r)}`).join(", ")}</div>`;
+      if (f.waiting) return `<div class="ok">✓ Přidáno – čas určí plán při přepočtu</div>`;
+      return "";
+    }
+
+    _entry(a) {
+      // které připojení (ostrá / beta) entitu vlastní – bez entry_id by služba šla jen na řídicí připojení
+      const ent = (this._hass.entities || {})[this._e(a, "sensor", "vykon")];
+      const dev = ent && ent.device_id && (this._hass.devices || {})[ent.device_id];
+      return dev && (dev.config_entries || [])[0];
+    }
+
+    async _cancelRun(a, job) {
+      const pa = (this._st(a, "sensor", "vykon") || {}).attributes || {};
+      const data = { appliance: pa.name || a.id, job };
+      const entry = this._entry(a); if (entry) data.entry_id = entry;
+      this._xBusy = this._xBusy || {}; this._xBusy[job] = true; this._sig = null; this._render();
+      try {
+        await this._call("ems2", "cancel_appliance", data);
+      } catch (e) {
+        const m = String((e && (e.message || e.code)) || e || "");
+        this._xErr = this._xErr || {};
+        this._xErr[a.id] = { text: /extra keys|job/i.test(m) ? "Rušení jednotlivých běhů potřebuje integraci EMS 2.0 2.0.39b2 nebo novější."
+          : `Běh se nepodařilo zrušit: ${m}`, until: Date.now() + 10000 };
+        setTimeout(() => { this._sig = null; this._render(); }, 10100);
+      }
+      setTimeout(() => { delete this._xBusy[job]; this._sig = null; this._render(); }, 60000);
+      this._sig = null; this._render();
+    }
+
     _bind(apps) {
       const root = this.shadowRoot;
       for (const a of apps) {
         const el = root.querySelector(`[data-app="${a.id}"]`); if (!el) continue;
         const q = (s) => el.querySelector(s);
-        const setDT = (key, dSel, tSel) => {
-          const d = q(dSel).value, t = q(tSel).value; if (!d || !t) return;
-          this._call("datetime", "set_value", { entity_id: this._e(a, "datetime", key), datetime: `${d} ${t}:00` });
-        };
         el.querySelectorAll("[data-f]").forEach((inp) => inp.addEventListener("change", () => {
           const f = inp.dataset.f;
-          if (f.startsWith("od")) setDT("od", '[data-f="od-d"]', '[data-f="od-t"]');
-          else if (f.startsWith("do")) setDT("do", '[data-f="do-d"]', '[data-f="do-t"]');
+          if (f.startsWith("od") || f.startsWith("do")) {
+            // jen zapamatovat – do HA až po opuštění pole (focusout) nebo s „Naplánovat“
+            const v = (sel) => (q(sel) || {}).value || "";
+            this._draft = this._draft || {};
+            this._draft[a.id] = { vals: [v('[data-f="od-d"]'), v('[data-f="od-t"]'), v('[data-f="do-d"]'), v('[data-f="do-t"]')],
+              dirty: Object.assign({}, (this._draft[a.id] || {}).dirty, { [f.slice(0, 2)]: true }), until: Date.now() + 120000 };
+          }
           else if (f === "then-now") { if (inp.value) this._setThen(a, inp.value); }
           else if (f === "then") this._call("select", "select_option", { entity_id: this._e(a, "select", "potom"), option: inp.value });
         }));
@@ -215,11 +345,20 @@
             this._call("number", "set_value", { entity_id: this._e(a, "number", "kolikrat"), value: Math.max(1, Math.min(8, n + (act === "plus" ? 1 : -1))) });
           } else if (act === "plan") {
             const v = (sel) => (q(sel) || {}).value || "";
-            this._startBusy(a, [v('[data-f="od-d"]'), v('[data-f="od-t"]'), v('[data-f="do-d"]'), v('[data-f="do-t"]')]);
-            try { await this._call("button", "press", { entity_id: this._e(a, "button", "naplanovat") }); this._sentBusy(a); }
+            const vals = [v('[data-f="od-d"]'), v('[data-f="od-t"]'), v('[data-f="do-d"]'), v('[data-f="do-t"]')];
+            this._startBusy(a, vals);
+            try {
+              // časy z formuláře nejdřív do HA (i když pole nikdo neopustil), pak naplánovat
+              if (vals[0] && vals[1]) await this._call("datetime", "set_value", { entity_id: this._e(a, "datetime", "od"), datetime: `${vals[0]} ${vals[1]}:00` });
+              if (vals[2] && vals[3]) await this._call("datetime", "set_value", { entity_id: this._e(a, "datetime", "do"), datetime: `${vals[2]} ${vals[3]}:00` });
+              if (this._draft) delete this._draft[a.id];
+              await this._call("button", "press", { entity_id: this._e(a, "button", "naplanovat") }); this._sentBusy(a);
+            }
             catch (e) { delete this._busy[a.id]; this._sig = null; this._render(); }
           } else if (act === "then-open" || act === "then-close") {
             this._thenOpen = this._thenOpen || {}; this._thenOpen[a.id] = act === "then-open"; this._sig = null; this._render();
+          } else if (act === "x") {
+            this._cancelRun(a, b.dataset.job);
           } else if (act === "then-off") {
             this._setThen(a, "");
           } else if (act === "cancel") {
@@ -297,6 +436,22 @@
     .pri { background: var(--primary-color); color: var(--text-primary-color, #fff); }
     .sec { background: none; color: var(--primary-text-color); border: 1px solid var(--divider-color, rgba(127,127,127,.4)) !important; }
     button:disabled { opacity: .7; }
+    .runs { background: var(--secondary-background-color, rgba(127,127,127,.08)); border-radius: 10px; padding: 6px 10px 8px; margin: 4px 0 10px; }
+    .runs .hd { display: flex; justify-content: space-between; font-size: 11px; color: var(--secondary-text-color); margin: 2px 0 4px; }
+    .run { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--divider-color, rgba(127,127,127,.2)); font-size: 15px; }
+    .runs .hd + .run { border-top: 0; }
+    .run .t { flex: 1; min-width: 0; color: var(--primary-text-color); }
+    .run .t small { display: block; font-size: 11px; color: var(--secondary-text-color); }
+    .run .st { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; white-space: nowrap; color: var(--secondary-text-color); }
+    .run .st.go { background: rgba(16,185,129,.16); color: #10b981; }
+    .run .st.late { background: rgba(245,158,11,.16); color: #f59e0b; }
+    .run .st.new { background: rgba(99,102,241,.2); color: var(--primary-color); }
+    .run.hl { background: rgba(99,102,241,.10); margin: 0 -10px; padding: 6px 10px; border-radius: 8px; }
+    .run .x { background: none; border: 0; color: var(--secondary-text-color); font-size: 16px; cursor: pointer; padding: 2px 4px; }
+    .run .x:hover { color: var(--error-color, #db4437); }
+    .xerr { font-size: 12px; color: var(--error-color, #db4437); margin-top: 4px; }
+    .ok { display: flex; align-items: center; gap: 8px; background: rgba(16,185,129,.14); color: #10b981; border-radius: 10px;
+      padding: 9px 12px; font-size: 14px; font-weight: 600; margin-bottom: 10px; }
   </style>`;
 
   if (!customElements.get("ems2-appliances-card")) customElements.define("ems2-appliances-card", Ems2AppliancesCard);
@@ -338,7 +493,23 @@
       return id ? h.states[id] : null;
     }
     _render() {
-      if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+      if (!this.shadowRoot) {
+        this.attachShadow({ mode: "open" });
+        // posluchače jednou na celý shadow root (obsah se překresluje)
+        this.shadowRoot.addEventListener("pointerdown", () => { this._down = true; });
+        const up = () => { this._down = false; this._later(); };
+        this.shadowRoot.addEventListener("pointerup", up);
+        this.shadowRoot.addEventListener("pointercancel", up);
+        this.shadowRoot.addEventListener("focusout", (ev) => {
+          const t = ev.target, el = t && t.closest && t.closest("[data-app]");
+          // čas a datum se do HA pošlou, až pole opustí (ne po každé číslici)
+          if (el && t.dataset && /^(od|do)-/.test(t.dataset.f || "")) {
+            const nxt = ev.relatedTarget;
+            if (!(nxt && nxt.closest && nxt.closest(".dt") && nxt.closest(".dt") === t.closest(".dt"))) this._flushDraft(el.dataset.app, t.dataset.f.slice(0, 2));
+          }
+          this._later();
+        });
+      }
       const ws = this._ws && this._ws.configured ? this._ws : null;
       const st = ws ? { attributes: ws, last_updated: new Date(this._wsAt).toISOString() } : this._state();
       const title = esc(this._config.title || "Baterie – články");

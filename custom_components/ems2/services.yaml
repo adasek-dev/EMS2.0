@@ -66,6 +66,10 @@ cancel_appliance:
       example: "Pračka"
       selector:
         text:
+    job:
+      required: false
+      selector:
+        text:
     entry_id:
       required: false
       selector:

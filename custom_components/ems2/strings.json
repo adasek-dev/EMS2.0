@@ -196,6 +196,10 @@
           "name": "Spotřebič",
           "description": "Název nebo id spotřebiče."
         },
+        "job": {
+          "name": "Běh",
+          "description": "Id konkrétního běhu, který se má zrušit (✕ v kartě). Prázdné = nejbližší běh."
+        },
         "entry_id": {
           "name": "Dům",
           "description": "Jen pro tento dům."

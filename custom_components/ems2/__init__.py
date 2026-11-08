@@ -31,7 +31,8 @@ PLAN_APPLIANCE_SCHEMA = vol.Schema({
     vol.Required("appliance"): cv.string, vol.Optional("count", default=1): vol.All(vol.Coerce(int), vol.Range(1, 8)),
     vol.Optional("earliest"): cv.datetime, vol.Optional("deadline"): cv.datetime, vol.Optional("then"): cv.string,
     vol.Optional("kwh"): vol.Coerce(float), vol.Optional("entry_id"): cv.string})
-CANCEL_APPLIANCE_SCHEMA = vol.Schema({vol.Required("appliance"): cv.string, vol.Optional("entry_id"): cv.string})
+CANCEL_APPLIANCE_SCHEMA = vol.Schema({vol.Required("appliance"): cv.string, vol.Optional("job"): cv.string,
+                                     vol.Optional("entry_id"): cv.string})
 THEN_APPLIANCE_SCHEMA = vol.Schema({vol.Required("appliance"): cv.string, vol.Optional("then", default=""): cv.string,
                                     vol.Optional("entry_id"): cv.string})
 
@@ -56,6 +57,7 @@ def _coordinators(hass: HomeAssistant, entry_id: str | None) -> list[Ems2Coordin
 
 CARDS_DIR = "/ems2_static"
 CARDS_URL = f"{CARDS_DIR}/ems2-cards.js"
+CARDS_SRC_URL = "/ems2_cards_src"
 
 
 def _cards_server(hass: HomeAssistant) -> str:
@@ -82,6 +84,21 @@ async def _register_cards(hass: HomeAssistant) -> None:
         await hass.http.async_register_static_paths([StaticPathConfig(CARDS_DIR, str(path), False)])
         srv = _cards_server(hass)
         add_extra_js_url(hass, f"{CARDS_URL}?v={ver}" + (f"&srv={srv}" if srv else ""))
+        # server pro karty se zjišťuje i při každém načtení stránky (po přidání / odebrání bety bez restartu HA)
+        from homeassistant.components.http import HomeAssistantView
+
+        class CardsSrcView(HomeAssistantView):
+            """Odkud zavaděč načte karty podle připojení teď (beta „jen sledování“ má přednost).
+            Bez přihlášení – vrací jen adresu serveru EMS, kterou má zavaděč stejně v odkazu."""
+            url = CARDS_SRC_URL
+            name = "ems2:cards_src"
+            requires_auth = False
+
+            async def get(self, request):
+                from urllib.parse import unquote
+                return self.json({"srv": unquote(_cards_server(hass))})
+
+        hass.http.register_view(CardsSrcView())
         _LOGGER.debug("EMS 2.0: karty pro dashboard (%s?v=%s, server %s)", CARDS_URL, ver, srv)
     except Exception as e:      # noqa: BLE001 – bez karet integrace funguje dál, ale ať je to v logu vidět
         _LOGGER.warning("EMS 2.0: karty pro dashboard se nenačetly: %s", e)
@@ -147,7 +164,10 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             if coord.watch and not call.data.get("entry_id"):
                 continue
             try:
-                await coord.api.jobs({"action": "cancel_next", "appliance": call.data["appliance"]})
+                body = {"action": "cancel_next", "appliance": call.data["appliance"]}
+                if call.data.get("job"):
+                    body["job"] = call.data["job"]          # konkrétní běh (karta „Naplánováno“ ✕), jinak nejbližší
+                await coord.api.jobs(body)
             except EmsApiError as e:
                 raise HomeAssistantError(f"EMS 2.0: {e.message}") from e
 
