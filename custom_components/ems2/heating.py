@@ -26,7 +26,7 @@ _ON = {"on", "true", "1", "heat", "heating", "topi", "topí", "running", "zapnut
 _OFF = {"off", "false", "0", "idle", "standby", "netopi", "netopí", "vypnuto"}
 _POWER = {"W": 1.0, "kW": 1000.0, "MW": 1_000_000.0}
 
-LABELS = {"heat_hold": "šetřit baterii (topí se)", "heat_grid": "topení ze sítě"}
+LABELS = {"heat_hold": "šetřit baterii (topí se)", "heat_grid": "topení ze sítě", "fill": "dobíjení volného místa"}
 
 
 def read(get_state: GetState, state_entity: str | None, power_entity: str | None) -> tuple[bool | None, float | None]:
@@ -144,6 +144,30 @@ def vt_battery_first(heating_cfg: dict, command: dict | None, slot: str) -> bool
     cmd = command or {}
     cur = cmd if cmd.get("slot") == slot else (cmd.get("next") or {})
     return bool((heating_cfg or {}).get("vt_battery_first", True) and cur.get("vt"))
+
+
+FILL_MARGIN_W = 200        # dobíjení volného místa: odběr aspoň o tolik nad spotřebou domu, ať se baterie nevybíjí
+
+
+def fill_grid_target(command: dict | None, slot: str, pv_w: float | None, load_w: float | None,
+                     soc: float | None) -> tuple[int, float | None] | None:
+    """Dobíjení volného místa v levném okně (fill_w / fill_soc v povelu „šetřit“ nebo „nabíjet“).
+
+    Odběr ze sítě = větší z: strop odběru (fill_w), spotřeba domu − FVE + rezerva, plánované nabíjení.
+    Když dům bere méně, baterie dobere zbytek do stropu; když bere víc (kotel naplno), cíl se zvedne
+    na spotřebu domu a baterie se nevybíjí. Vrací (grid_w pro povel, − = odběr; strop SOC) nebo None."""
+    cmd = command or {}
+    cur = cmd if cmd.get("slot") == slot else (cmd.get("next") or {})
+    fw = cur.get("fill_w")
+    if not fw or cur.get("mode") not in ("hold", "charge") or pv_w is None or load_w is None or soc is None:
+        return None
+    fs = cur.get("fill_soc")
+    if fs is not None and soc >= float(fs) - 0.5:
+        return None
+    deficit = max(0.0, load_w - pv_w)
+    planned = deficit + max(0.0, float(cur.get("battery_w") or 0)) if cur.get("mode") == "charge" else 0.0
+    target = max(float(fw), deficit + FILL_MARGIN_W, planned)
+    return -int(round(target / 100.0) * 100), (None if fs is None else float(fs))
 
 
 def charge_grid_target(command: dict | None, slot: str, pv_w: float | None, load_w: float | None) -> int | None:
