@@ -343,7 +343,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
             # levné okno: odběr až na strop, baterie dobere, co dům nechá volné (nikdy se nevybíjí)
             mode, label, (grid_w, fs) = "charge", "fill", fill
             soc_max = fs if fs is not None else soc_max
-            reason = f"dobíjení volného místa – odběr {-grid_w} W" + (f" do {fs:.0f} %" if fs is not None else "")
+            reason = f"dokoupit levně na později – odběr {-grid_w} W" + (f" do {fs:.0f} %" if fs is not None else "")
         elif h:
             mode, label, grid_w, reason = h
         elif mode == "charge" and server_control:

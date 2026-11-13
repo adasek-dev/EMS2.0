@@ -26,7 +26,7 @@ _ON = {"on", "true", "1", "heat", "heating", "topi", "topí", "running", "zapnut
 _OFF = {"off", "false", "0", "idle", "standby", "netopi", "netopí", "vypnuto"}
 _POWER = {"W": 1.0, "kW": 1000.0, "MW": 1_000_000.0}
 
-LABELS = {"heat_hold": "šetřit baterii (topí se)", "heat_grid": "topení ze sítě", "fill": "dobíjení volného místa"}
+LABELS = {"heat_hold": "šetřit baterii (topí se)", "heat_grid": "topení ze sítě", "fill": "dokoupit levně na později"}
 
 
 def read(get_state: GetState, state_entity: str | None, power_entity: str | None) -> tuple[bool | None, float | None]:
