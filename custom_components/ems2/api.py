@@ -106,6 +106,9 @@ class EmsApi:
     async def billing(self) -> dict:
         return await self._req("GET", f"/api/v1/sites/{self.site_id}/billing")
 
+    async def pnd(self) -> dict:
+        return await self._req("GET", f"/api/v1/sites/{self.site_id}/pnd")
+
     async def load_history(self, body: dict) -> dict:
         return await self._req("POST", self._site("/load_history"), json=body)
 

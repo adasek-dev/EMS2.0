@@ -59,6 +59,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
         self.plan: dict = {}
         self.accounting: dict = {}
         self.billing: dict = {}
+        self.pnd: dict = {}
         self.applied: dict = {"mode": None, "reason": "zatím nic", "controlling": False}
         self._controlling = False
         self.heating = HeatingControl()
@@ -261,6 +262,10 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
                     self.billing = await self.api.billing()
                 except EmsApiError as e:            # starší server bez vyúčtování
                     _LOGGER.debug("EMS 2.0 vyúčtování: %s", e)
+                try:
+                    self.pnd = await self.api.pnd()
+                except EmsApiError as e:            # starší server bez PND
+                    _LOGGER.debug("EMS 2.0 PND: %s", e)
                 self._last_acc = time.monotonic()
         except EmsAuthError as e:
             self.connected = False
@@ -487,7 +492,7 @@ class Ems2Coordinator(DataUpdateCoordinator[dict]):
                 "last_error": self.last_error, "buffered": len(self.buffer), "events_ok": self.events_ok,
                 "events_error": self.events_error,
                 "advice": (self.command or {}).get("advice"), "advice_only": self.advice_only,
-                "billing": self.billing}
+                "billing": self.billing, "pnd": self.pnd}
 
     # ── zápisy z entit ───────────────────────────────────────────
     async def patch_setting(self, key: str, value: Any) -> None:

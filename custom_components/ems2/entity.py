@@ -16,6 +16,7 @@ GROUPS = {
     "predpoved": ("Předpověď a náklady", "předpověď a náklady"),
     "bojler": ("Bojler", "plán ohřevu"),
     "topeni": ("Topení", "plán topení"),
+    "elektromer": ("Elektroměr ČEZ", "naměřená data z PND ČEZ Distribuce"),
 }
 _C, _D = EntityCategory.CONFIG, EntityCategory.DIAGNOSTIC
 # klíč entity → (skupina, kratší název v rámci zařízení nebo None, kategorie)
@@ -42,6 +43,14 @@ PLACE = {
     "topeni_cil": ("topeni", "Cílová teplota", None), "topeni_vykon": ("topeni", "Plánovaný výkon", None),
     "dop_heat_now": ("topeni", "Topit teď", None), "dop_heat_preheat": ("topeni", "Předtápět", None),
     "vytapeni": ("topeni", "Režim vytápění", None),
+    "pnd_odber_vcera": ("elektromer", "Odběr za poslední den", None),
+    "pnd_dodavka_vcera": ("elektromer", "Dodávka za poslední den", None),
+    "pnd_odber_mesic": ("elektromer", "Odběr tento měsíc", None),
+    "pnd_dodavka_mesic": ("elektromer", "Dodávka tento měsíc", None),
+    "pnd_odber_obdobi": ("elektromer", "Odběr za zúčtovací období", None),
+    "pnd_dodavka_obdobi": ("elektromer", "Dodávka za zúčtovací období", None),
+    "pnd_rozdil_odberu": ("elektromer", "Rozdíl odběru EMS", None),
+    "pnd_stav": ("elektromer", "Stahování z PND", _D),
 }
 
 

@@ -20,6 +20,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         Accounting(c, "savings_kc", "uspora_dnes", "Úspora dnes"), BatteryTarget(c),
         HdoTariff(c), HdoNextSwitch(c),
         Advice(c), PriceLevel(c), AdviceSocTarget(c), Billing(c),
+        PndEnergy(c, "pnd_odber_vcera", "Elektroměr ČEZ: odběr za poslední den", ("last_day", "import_kwh"), "mdi:transmission-tower-import"),
+        PndEnergy(c, "pnd_dodavka_vcera", "Elektroměr ČEZ: dodávka za poslední den", ("last_day", "export_kwh"), "mdi:transmission-tower-export"),
+        PndEnergy(c, "pnd_odber_mesic", "Elektroměr ČEZ: odběr tento měsíc", ("month", "import_kwh"), "mdi:transmission-tower-import"),
+        PndEnergy(c, "pnd_dodavka_mesic", "Elektroměr ČEZ: dodávka tento měsíc", ("month", "export_kwh"), "mdi:transmission-tower-export"),
+        PndEnergy(c, "pnd_odber_obdobi", "Elektroměr ČEZ: odběr za zúčtovací období", ("billing_period", "import_kwh"), "mdi:transmission-tower-import"),
+        PndEnergy(c, "pnd_dodavka_obdobi", "Elektroměr ČEZ: dodávka za zúčtovací období", ("billing_period", "export_kwh"), "mdi:transmission-tower-export"),
+        PndDiff(c), PndStatus(c),
         AdviceTime(c, "okno_levne_1h", "Nejlevnější hodina", ("cheapest", 1), "mdi:clock-check"),
         AdviceTime(c, "okno_levne_2h", "Nejlevnější 2 h", ("cheapest", 2), "mdi:clock-check"),
         AdviceTime(c, "okno_levne_3h", "Nejlevnější 3 h", ("cheapest", 3), "mdi:clock-check"),
@@ -345,6 +352,87 @@ class Billing(Ems2Entity, SensorEntity):
         b = self.d.get("billing") or {}
         return {k: b.get(k) for k in ("start", "end", "cost_now", "paid_now", "balance_now", "projected", "advances_total",
                                       "fixed_month", "energy_kwh", "recommended", "recommended_rest", "forecast_basis")}
+
+
+class _Pnd(Ems2Entity, SensorEntity):
+    """Elektroměr distributora (PND ČEZ Distribuce) – data stahuje server EMS, sem chodí souhrn z /pnd."""
+
+    @property
+    def pnd(self) -> dict:
+        return self.d.get("pnd") or {}
+
+    @property
+    def available(self) -> bool:
+        return super().available and bool(self.pnd.get("enabled") or (self.pnd.get("coverage") or {}).get("slots"))
+
+
+class PndEnergy(_Pnd):
+    """Odběr / dodávka podle elektroměru ČEZ (kWh) za poslední celý den, tento měsíc nebo zúčtovací období."""
+    _attr_native_unit_of_measurement = "kWh"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, c, key, name, spec, icon):
+        super().__init__(c, key, name, icon)
+        self._spec = spec
+
+    @property
+    def native_value(self):
+        return (self.pnd.get(self._spec[0]) or {}).get(self._spec[1])
+
+    @property
+    def extra_state_attributes(self):
+        part = self.pnd.get(self._spec[0]) or {}
+        attrs = {k: part.get(k) for k in ("day", "from", "to", "complete") if k in part}
+        ems = part.get("ems_" + self._spec[1])
+        if ems is not None:
+            attrs["ems_kwh"] = ems
+        if self._spec[0] == "last_day" and self._spec[1] == "import_kwh":
+            attrs["days"] = self.pnd.get("days") or []
+        return attrs
+
+
+class PndDiff(_Pnd):
+    """O kolik EMS naměřilo jiný odběr než elektroměr ČEZ za poslední den (EMS − PND, %)."""
+    _attr_native_unit_of_measurement = "%"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 1
+
+    def __init__(self, c):
+        super().__init__(c, "pnd_rozdil_odberu", "Elektroměr ČEZ: rozdíl odběru EMS", "mdi:scale-unbalanced")
+
+    @property
+    def native_value(self):
+        return (self.pnd.get("last_day") or {}).get("diff_import_pct")
+
+    @property
+    def extra_state_attributes(self):
+        ld = self.pnd.get("last_day") or {}
+        return {k: ld.get(k) for k in ("day", "diff_import_kwh", "diff_export_kwh", "complete")}
+
+
+class PndStatus(_Pnd):
+    """Stav stahování z PND: ok / chyba / pozastaveno, s časem posledního stažení."""
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["ok", "chyba", "pozastaveno", "čeká"]
+
+    def __init__(self, c):
+        super().__init__(c, "pnd_stav", "Elektroměr ČEZ: stahování", "mdi:cloud-download")
+
+    @property
+    def native_value(self):
+        p = self.pnd
+        if p.get("blocked"):
+            return "pozastaveno"
+        if p.get("error"):
+            return "chyba"
+        return "ok" if p.get("last_ok") else "čeká"
+
+    @property
+    def extra_state_attributes(self):
+        p = self.pnd
+        return {"meter": p.get("meter"), "last_ok": p.get("last_ok"), "error": p.get("error"),
+                "data_from": (p.get("coverage") or {}).get("from"), "data_to": (p.get("coverage") or {}).get("to")}
 
 
 class BoilerOut(_Advice):
